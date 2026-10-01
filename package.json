@@ -1,0 +1,13 @@
+{
+  "name": "atelier-3d",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Portal de lucru pentru atelier de printare 3D",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.4"
+  }
+}
