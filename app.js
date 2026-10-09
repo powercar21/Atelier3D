@@ -6,14 +6,14 @@ const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'
 const today=()=>new Date().toISOString().slice(0,10),n=v=>Math.round(v).toLocaleString('ro-RO'),L=v=>v.toLocaleString('ro-RO',{minimumFractionDigits:2,maximumFractionDigits:2})+' lei';
 const sum=(a,f)=>a.reduce((x,r)=>x+f(r),0),fm=id=>S.fil.find(f=>f.id==id),pm=id=>S.prod.find(p=>p.id==id),pn=id=>(pm(id)||{name:'(șters)'}).name;
 const fname=id=>{const f=fm(id);return f?`<span class="dot" style="background:${f.hex}"></span>${esc(f.brand)} ${esc(f.mat)} ${esc(f.color)}`:'(șters)'};
-function stock(id){const i=sum(S.in.filter(r=>r.fil==id),r=>r.g),u=sum(S.mk.filter(r=>r.fil==id),r=>r.g);return{i,u,s:i-u}}
+function stock(id){const i=sum(S.in.filter(r=>r.fil==id),r=>r.g),u=sum(S.mk,r=>r.fils?sum(r.fils.filter(x=>x.fil==id),x=>x.g):(r.fil==id?r.g:0));return{i,u,s:i-u}}
 function cpg(id){const r=S.in.filter(x=>x.fil==id),g=sum(r,x=>x.g);return g>0&&sum(r,x=>x.q*x.p)>0?sum(r,x=>x.q*x.p)/g:((fm(id)||{}).pk||0)/1000}
 const fq=v=>(Math.round(v*100)/100).toLocaleString('ro-RO'),mtm=id=>S.mat.find(m=>m.id==id),mname=id=>{const m=mtm(id);return m?esc(m.name):'(șters)'},mun=id=>(mtm(id)||{u:''}).u;
 const mstk=id=>sum(S.mi.filter(r=>r.mat==id),r=>r.q)-sum(S.mk,r=>sum((r.mats||[]).filter(x=>x.mat==id),x=>x.q));
 const mcpu=id=>{const r=S.mi.filter(x=>x.mat==id),q=sum(r,x=>x.q),t=sum(r,x=>x.tot);return q>0&&t>0?t/q:((mtm(id)||{}).pu||0)};
-const mcost=r=>sum(r.mats||[],x=>x.q*(x.cu??mcpu(x.mat))),fcost=r=>r.g*(r.cp??cpg(r.fil)),nrOf=r=>r.nr||'PR-'+String(S.mk.indexOf(r)+1).padStart(4,'0');
+const mcost=r=>sum(r.mats||[],x=>x.q*(x.cu??mcpu(x.mat))),fcost=r=>r.fils?sum(r.fils,x=>x.g*(x.cp??cpg(x.fil))):r.g*(r.cp??cpg(r.fil)),nrOf=r=>r.nr||'PR-'+String(S.mk.indexOf(r)+1).padStart(4,'0');
 const matOpts=()=>S.mat.map(m=>`<option value="${m.id}">${esc(m.name)} (${fq(mstk(m.id))} ${m.u})</option>`).join('');
-function ucost(p){const r=S.mk.filter(x=>x.prod==p.id),q=sum(r,x=>x.q);return q?sum(r,x=>fcost(x)+mcost(x))/q:p.g*cpg(p.fil)+sum(p.bom||[],b=>b.q*mcpu(b.mat))}
+function ucost(p){const r=S.mk.filter(x=>x.prod==p.id),q=sum(r,x=>x.q);if(q)return sum(r,x=>fcost(x)+mcost(x))/q;const fc=(p.fils&&p.fils.length)?sum(p.fils,x=>x.g*cpg(x.fil)):p.g*cpg(p.fil);return fc+sum(p.bom||[],b=>b.q*mcpu(b.mat))}
 const made=id=>sum(S.mk.filter(r=>r.prod==id),r=>r.q),sold=id=>sum(S.sal.filter(r=>r.prod==id),r=>r.q),avail=id=>made(id)-sold(id);
 const rev=r=>r.q*r.pr,revTot=r=>r.q*r.pr+(r.liv||0),cogs=r=>r.q*(pm(r.prod)?ucost(pm(r.prod)):0);
 const fplain=id=>{const f=fm(id);return f?`${f.brand} ${f.mat} ${f.color}`:'(șters)'};
@@ -98,8 +98,8 @@ const need=(ok,t)=>ok?'':`<div class="e">${t}</div>`;
 const del_=(k,id)=>`<button class="x" onclick="del('${k}','${id}')">✕</button>`;
 const kpi=(i,b,s,c='')=>`<div class="${c}"><em>${i}</em><b>${b}</b><span>${s}</span></div>`;
 const pc=v=>`<b class="${v<0?'no':'ok'}">${L(v)}</b>`;
-const fstat=(p,q)=>{const f=fm(p.fil),s=stock(p.fil).s,need=q*p.g,c=s>=need?['ok','✓ În stoc']:s>0?['lo','⚠ Insuficient']:['no','✗ Epuizat'];
- return`<div class="om">${fname(f.id)}<br><span class="pill ${c[0]}" style="margin-top:6px">${c[1]} · ${n(Math.max(s,0))} g disponibil</span></div>`};
+const fstat=(p,q)=>{const fils=(p.fils&&p.fils.length)?p.fils:(p.fil?[{fil:p.fil,g:p.g}]:[]);if(!fils.length)return'';const bad=fils.map(x=>{const s=stock(x.fil).s,nd=q*x.g;return s>=nd?null:(s>0?'lo':'no')}).filter(Boolean);const st=bad.includes('no')?['no','✗ Filament epuizat']:bad.includes('lo')?['lo','⚠ Stoc filament insuficient']:['ok','✓ Filament în stoc'];return`<div class="om">${fils.map(x=>fname(x.fil)).join(' + ')}<br><span class="pill ${st[0]}" style="margin-top:6px">${st[1]}</span></div>`};
+function addExtraFilRow(cid='filRows'){const c=document.getElementById(cid);if(!c)return;const div=document.createElement('div');div.className='bl2 fil-row';div.style.marginTop='6px';div.innerHTML=`<label>Plastic suplimentar<select name="xfil"><option value="">— alege —</option>${filOpts()}</select></label><label>Gramaj (g)<input type="number" step="0.1" min="0.1" name="xfil_g" placeholder="ex. 25"></label><button type="button" class="x" style="align-self:end;margin-bottom:6px" onclick="this.parentElement.remove()">✕</button>`;c.appendChild(div)}
 const views={
 home(){const t=tot(),low=S.fil.filter(f=>stock(f.id).s<=f.min),lowM=S.mat.filter(m=>mstk(m.id)<=m.min),mo=today().slice(0,7),mk=S.mk.filter(r=>r.d.startsWith(mo)),ms=mstat(mo);
  return`<div class="kpi">${ADM()?kpi('💰',L(t.P),'Profit total','pr'):''}${kpi('🛒',L(ms.R),'Vânzări luna aceasta')}${kpi('🧵',(Math.round(sum(S.fil,f=>stock(f.id).s)/100)/10).toLocaleString('ro-RO')+' kg','Stoc filament')}${kpi('📦',sum(S.prod,p=>avail(p.id))+' buc','Produse finite în stoc')}${kpi('🏭',sum(mk,r=>r.q)+' buc','Produse luna aceasta ('+n(sum(mk,r=>r.g))+' g)')}${kpi('📋',S.ord.filter(o=>o.st!='done').length,'Comenzi active')}${kpi('🔍',S.ord.filter(o=>o.st=='qc').length,'La control calitate')}${kpi('⚠️',low.length,'Filamente sub minim')}</div>
@@ -125,10 +125,13 @@ mat(){const MC=['Vopsea','Piesă','Componentă','Consumabil','Altele'];return`<d
 <div class="card"><h2>Stoc materiale</h2><div class="tw">${tbl(['Material','Categorie','Intrat','Consumat','Stoc','Cost / UM','Valoare',''],S.mat.map(m=>{const i=sum(S.mi.filter(r=>r.mat==m.id),r=>r.q),k=mstk(m.id);return[esc(m.name),m.cat,fq(i)+' '+m.u,fq(i-k)+' '+m.u,`<span class="pill ${k<=0?'no':k<=m.min?'lo':'ok'}">${fq(k)} ${m.u}</span>`,L(mcpu(m.id)),L(Math.max(0,k)*mcpu(m.id)),del_('mat',m.id)]}))}</div></div>
 <div class="card"><h2>Istoric intrări materiale</h2><div class="tw">${tbl(['Data','Material','Cantitate','Valoare','Preț / UM','Factură','Furnizor',''],S.mi.slice().reverse().map(r=>[r.d,mname(r.mat),fq(r.q)+' '+mun(r.mat),L(r.tot),L(r.tot/r.q),esc(r.inv||'-'),esc(r.sup||'-'),del_('mi',r.id)]))}</div></div>`},
 prod(){return`<div class="card"><h2>Produs nou</h2><form onsubmit="addProd(event)">
- <label>Denumire produs<input name="name" required></label><label>Gramaj / bucată (g)<input type="number" step="0.1" min="0.1" name="g" required></label>
- <label>Preț de vânzare (lei)<input type="number" step="0.01" min="0" name="pr" value="0"></label><label>Filament implicit<select name="fil"><option value="">—</option>${filOpts()}</select></label>
- <button class="btn">Adaugă produs</button></form></div>
- <div class="card"><h2>Produse</h2><div class="tw">${tbl(['Produs','Gramaj','Preț vânzare','Cost producție','Marjă / buc','Produse','Vândute','În stoc',''],S.prod.map(p=>{const c=ucost(p);return[esc(p.name),p.g+' g',L(p.pr||0),L(c),pc((p.pr||0)-c),made(p.id),sold(p.id),`<b>${avail(p.id)}</b>`,del_('prod',p.id)]}))}</div></div>
+ <div class="bl2"><label>Denumire produs<input name="name" required></label><label>Preț de vânzare (lei)<input type="number" step="0.01" min="0" name="pr" value="0"></label></div>
+ <div style="margin-top:10px"><b>Tipuri de plastic / filamente folosite:</b>
+   <div id="pFilRows"><div class="bl2 fil-row" style="margin-top:6px"><label>Filament principal<select name="pfil" required><option value="">— alege —</option>${filOpts()}</select></label><label>Gramaj (g)<input type="number" step="0.1" min="0.1" name="pg" required placeholder="ex. 100"></label></div></div>
+   <button type="button" class="btn ghost" style="margin-top:8px;height:32px;font-size:13px" onclick="addExtraFilRow('pFilRows')">➕ Adaugă alt tip de plastic (multi-color / multi-material)</button>
+ </div>
+ <button class="btn" style="margin-top:12px">Adaugă produs</button></form></div>
+ <div class="card"><h2>Produse</h2><div class="tw">${tbl(['Produs','Gramaj & Filamente','Preț vânzare','Cost producție','Marjă / buc','Produse','Vândute','În stoc',''],S.prod.map(p=>{const c=ucost(p),fls=(p.fils&&p.fils.length)?p.fils.map(x=>`${fname(x.fil)} (${x.g}g)`).join(' + '):fname(p.fil);return[esc(p.name),`<b>${p.g} g</b><br><small>${fls}</small>`,L(p.pr||0),L(c),pc((p.pr||0)-c),made(p.id),sold(p.id),`<b>${avail(p.id)}</b>`,del_('prod',p.id)]}))}</div></div>
  <div class="card"><h2>Rețetă: materiale per bucată <small>vopsea, piese, componente</small></h2>${need(S.prod.length&&S.mat.length,'Adaugă produse și materiale.')}<form onsubmit="addBom(event)"><label>Produs<select name="prod">${S.prod.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('')}</select></label><label>Material<select name="mat">${matOpts()}</select></label><label>Cantitate / bucată<input type="number" step="any" min="0.001" name="q" required></label><button class="btn">Adaugă în rețetă</button></form>
  <div class="tw">${tbl(['Produs','Material','Cantitate / buc',''],S.prod.flatMap(p=>(p.bom||[]).map(b=>[esc(p.name),mname(b.mat),fq(b.q)+' '+mun(b.mat),`<button class="x" onclick="delBom('${p.id}','${b.mat}')">✕</button>`])))}</div></div>`},
 
@@ -190,9 +193,13 @@ ord(){const ST={new:['Noi','#e8912c'],wip:['În lucru','#0f9d8a'],qc:['La contro
  <label>Client<input name="client" required></label><label>Produs<select name="prod" required onchange="togNew(this)">${S.prod.map(p=>`<option value="${p.id}">${esc(p.name)} (${p.g} g)</option>`).join('')}<option value="__new"${S.prod.length?'':' selected'}>➕ Produs nou (nu este în Produse)</option></select></label>
  <label>Cantitate<input type="number" name="q" min="1" value="1" required></label><label>Termen<input type="date" name="due"></label>
  <label>Prioritate<select name="pri"><option value="n">Normală</option><option value="u">Urgentă</option></select></label><label>Observații<input name="note" placeholder="culoare, detalii…"></label>
- <div id="newProd" class="bb" style="grid-column:1/-1" ${S.prod.length?'hidden':''}><b>Produs nou – se înregistrează automat în Produse</b>
- <div class="bl2"><label>Denumire produs<input name="pname" ${S.prod.length?'':'required'}></label><label>Gramaj / bucată (g)<input type="number" step="0.1" min="0.1" name="pg" ${S.prod.length?'':'required'}></label><label>Filament folosit<select name="pfil" ${S.prod.length?'':'required'}><option value="">— alege —</option>${filOpts()}</select></label><label>Preț vânzare (lei)<input type="number" step="0.01" min="0" name="ppr" value="0"></label></div>
- ${S.fil.length?'':'<div class="om no">Adaugă mai întâi un filament în catalog.</div>'}</div>
+ <div id="newProd" class="bb" style="grid-column:1/-1" ${S.prod.length?'hidden':''}><b>Produs nou / personalizat – se înregistrează automat în Produse</b>
+ <div class="bl2"><label>Denumire produs<input name="pname" ${S.prod.length?'':'required'}></label><label>Preț vânzare (lei)<input type="number" step="0.01" min="0" name="ppr" value="0"></label></div>
+ <div style="margin-top:10px"><b>Tipuri de plastic / filamente folosite:</b>
+   <div id="filRows"><div class="bl2 fil-row" style="margin-top:6px"><label>Filament principal<select name="pfil" ${S.prod.length?'':'required'}><option value="">— alege —</option>${filOpts()}</select></label><label>Gramaj (g)<input type="number" step="0.1" min="0.1" name="pg" ${S.prod.length?'':'required'} placeholder="ex. 100"></label></div></div>
+   <button type="button" class="btn ghost" style="margin-top:8px;height:32px;font-size:13px" onclick="addExtraFilRow('filRows')">➕ Adaugă alt tip de plastic (multi-color / multi-material)</button>
+ </div>
+ ${S.fil.length?'':'<div class="om no" style="margin-top:8px">Adaugă mai întâi un filament în catalog.</div>'}</div>
  <button class="btn">Adaugă comanda</button></form></div>`:'';
  return f+`<div class="kb">${['new','wip','qc','done'].map(col).join('')}</div>`},
 usr(){return`<div class="card"><h2>Contul meu</h2><form onsubmit="doPw(event)"><label>Parola actuală<input type="password" name="o" required autocomplete="current-password"></label><label>Parola nouă (min. 6)<input type="password" name="p" minlength="6" required autocomplete="new-password"></label><button class="btn">Schimbă parola</button></form><div class="msg">${msg}</div></div>`+(ADM()?`<div class="card"><h2>Setări companie <small>apare pe documentele PDF</small></h2><form onsubmit="saveCfg(event)"><label>Denumirea companiei<input name="company" required maxlength="80" value="${esc(company())}"></label><button class="btn">Salvează</button></form><div class="msg" style="color:var(--ok)">${cfgMsg}</div></div><div class="card"><h2>Adaugă utilizator</h2><form onsubmit="addUser(event)"><label>Nume<input name="name" required></label><label>Email<input type="email" name="un" required autocapitalize="off"></label><label>Parolă (min. 6)<input type="password" name="pw" minlength="6" required></label><label>Rol<select name="role"><option value="op">Operator (Comenzi + Stoc filament)</option><option value="qc">Control calitate (doar pagina de calitate)</option><option value="admin">Administrator</option></select></label><button class="btn">Adaugă</button></form></div><div class="card"><h2>Utilizatori</h2><div class="tw">${tbl(['Nume','Email','Rol',''],U.map(u=>[esc(u.name),esc(u.email||''),RL[u.role],`<button class="x" title="Resetează parola" onclick="resetPw('${u.id}')">🔑</button>${u.id==cur.id?'':`<button class="x" onclick="delUser('${u.id}')">✕</button>`}`]))}</div></div>`:'')}
@@ -200,10 +207,13 @@ usr(){return`<div class="card"><h2>Contul meu</h2><form onsubmit="doPw(event)"><
 function tbl(h,rows){return rows.length?`<table><tr class="hd">${h.map(x=>`<th>${x}</th>`).join('')}</tr>${rows.map(r=>`<tr>${r.map((c,i)=>`<td data-label="${h[i]||''}">${c}</td>`).join('')}</tr>`).join('')}</table>`:'<div class="e">Nicio înregistrare.</div>'}
 const fd=e=>{e.preventDefault();return Object.fromEntries(new FormData(e.target))};
 function togNew(sel){const on=sel.value=='__new',b=document.getElementById('newProd');b.hidden=!on;b.querySelectorAll('input[name=pname],input[name=pg],select[name=pfil]').forEach(x=>x.required=on);if(on)b.querySelector('input[name=pname]').focus()}
-function addOrd(e){const d=fd(e);let pid=d.prod,np=false;
- if(pid=='__new'){const nm=(d.pname||'').trim(),g=+d.pg;if(!nm||!(g>0)||!d.pfil){alert('Completează denumirea, gramajul și filamentul produsului nou.');return}
+function addOrd(e){const d=fd(e),form=e.target;let pid=d.prod,np=false;
+ if(pid=='__new'){const nm=(d.pname||'').trim(),mainFil=d.pfil,mainG=+d.pg;if(!nm||!(mainG>0)||!mainFil){alert('Completează denumirea, gramajul și filamentul principal al produsului nou.');return}
+  const extraFils=[];const xFils=form.querySelectorAll('select[name=xfil]'),xGs=form.querySelectorAll('input[name=xfil_g]');
+  xFils.forEach((sel,i)=>{const fId=sel.value,gVal=+(xGs[i]?xGs[i].value:0);if(fId&&gVal>0)extraFils.push({fil:fId,g:gVal})});
+  const allFils=[{fil:mainFil,g:mainG},...extraFils],totalG=sum(allFils,x=>x.g);
   const ex=S.prod.find(p=>p.name.trim().toLowerCase()==nm.toLowerCase());
-  if(ex)pid=ex.id;else{pid=uid();S.prod.push({id:pid,name:nm,g,pr:+d.ppr||0,fil:d.pfil});np=true}}
+  if(ex)pid=ex.id;else{pid=uid();S.prod.push({id:pid,name:nm,g:totalG,pr:+d.ppr||0,fil:mainFil,fils:allFils});np=true}}
  S.ord.push({id:uid(),d:today(),client:d.client.trim(),prod:pid,q:+d.q,due:d.due,pri:d.pri,note:d.note.trim(),st:'new'});if(np)save();saveOrd()}
 function setSt(id,st){const o=S.ord.find(x=>x.id==id);o.st=st;if(st=='qc'){o.sentBy=cur.name;o.sentAt=today();delete o.rej}if(st=='wip'&&!o.startedBy)o.startedBy=cur.name;if(st=='done')o.doneAt=today();else delete o.doneAt;saveOrd()}
 function delOrd(id){if(!confirm('Ștergi comanda?'))return;S.ord=S.ord.filter(x=>x.id!=id);saveOrd()}
@@ -266,15 +276,20 @@ async function pdfMk(id){USED={r:{},b:{}};const r=S.mk.find(x=>x.id==id);if(free
  try{const dl=null;if(dl){await dl.save({filename:fn,data:bytes});return}}catch(e){if(e&&e.code=='declined')return}
  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([bytes],{type:'application/pdf'}));a.download=fn;a.click()}
 function approveQc(id){const o=S.ord.find(x=>x.id==id),p=pm(o.prod),ok=Math.max(0,Math.min(o.q,Math.round(+document.getElementById('qa_'+id).value||0))),note=document.getElementById('qn_'+id).value.trim();
- if(!p||!p.fil||!fm(p.fil)){alert('Produsul nu are filament implicit. Cere administratorului să îl seteze în pagina Produse.');return}
+ if(!p||(!p.fil&&(!p.fils||!p.fils.length))){alert('Produsul nu are filament configurat. Cere administratorului să îl seteze în pagina Produse.');return}
  if(ok<1){alert('Nicio bucată conformă – folosește „Respinge".');return}
  if(ok<o.q&&!note){alert('Scrie la observații motivul rebuturilor.');return}
- const mats=(p.bom||[]).filter(b=>mtm(b.mat)).map(b=>({mat:b.mat,q:+(b.q*o.q).toFixed(3),cu:mcpu(b.mat)})),g=Math.round(o.q*p.g*10)/10;
- const short=[...(stock(p.fil).s<g?['filament']:[]),...mats.filter(m=>m.q>mstk(m.mat)).map(m=>mtm(m.mat).name)];
+ const mats=(p.bom||[]).filter(b=>mtm(b.mat)).map(b=>({mat:b.mat,q:+(b.q*ok).toFixed(3),cu:mcpu(b.mat)}));
+ const pfils=(p.fils&&p.fils.length)?p.fils.map(x=>({fil:x.fil,g:Math.round(ok*x.g*10)/10,cp:cpg(x.fil)})):[{fil:p.fil,g:Math.round(ok*(p.g||0)*10)/10,cp:cpg(p.fil)}];
+ const g=sum(pfils,x=>x.g);
+ const shortFils=pfils.filter(x=>stock(x.fil).s<x.g).map(x=>{const f=fm(x.fil);return f?`${f.brand} ${f.mat} ${f.color}`:'filament'});
+ const shortMats=mats.filter(m=>m.q>mstk(m.mat)).map(m=>mtm(m.mat).name);
+ const short=[...shortFils,...shortMats];
  if(short.length&&!confirm('Stoc insuficient la: '+short.join(', ')+'. Aprobi oricum?'))return;
- const nr='PR-'+String(Math.max(0,...S.mk.map(r=>+nrOf(r).slice(3)))+1).padStart(4,'0'),
-  r={id:uid(),nr,d:today(),prod:o.prod,q:ok,fil:p.fil,g,cp:cpg(p.fil),by:o.startedBy||o.sentBy||'',byRole:'op',mats,ord:o.id,qc:{by:cur.name,d:today(),ok,total:o.q,note}};
- S.mk.push(r);r.fa=stock(p.fil).s;r.mats.forEach(m=>m.after=mstk(m.mat));r.sn=snapOf(r);
+ const nr='PR-'+String(Math.max(0,...S.mk.map(r=>+nrOf(r).slice(3)))+1).padStart(4,'0');
+ const mainFil=pfils[0].fil;
+ const r={id:uid(),nr,d:today(),prod:o.prod,q:ok,fil:mainFil,fils:pfils,g,cp:cpg(mainFil),by:o.startedBy||o.sentBy||'',byRole:'op',mats,ord:o.id,qc:{by:cur.name,d:today(),ok,total:o.q,note}};
+ S.mk.push(r);r.fa=stock(mainFil).s;r.fils.forEach(x=>{x.fa=stock(x.fil).s});r.mats.forEach(m=>m.after=mstk(m.mat));r.sn=snapOf(r);
  o.st='done';o.doneAt=today();o.mk=r.id;o.qc={by:cur.name,d:today(),ok,note};save();saveOrd()}
 function rejectQc(id){const o=S.ord.find(x=>x.id==id),note=document.getElementById('qn_'+id).value.trim();
  if(!note){alert('Scrie motivul respingerii în Observații.');return}
@@ -283,7 +298,11 @@ const company=()=>(S.set[0]&&S.set[0].company)||'Atelier 3D';
 function saveCfg(e){const d=fd(e);S.set=[{id:'cfg',company:d.company.trim()||'Atelier 3D'}];cfgMsg='✓ Denumirea companiei a fost salvată.';save();setTimeout(()=>{cfgMsg='';if(tab=='usr')render()},2500)}
 function addFil(e){const d=fd(e);S.fil.push({id:uid(),brand:d.brand.trim(),mat:d.mat.trim(),color:d.color.trim(),hex:d.hex,pk:+d.pk,min:+d.min});save()}
 function addIn(e){const d=fd(e);S.in.push({id:uid(),d:d.d,fil:d.fil,q:+d.q,w:+d.w,g:d.q*d.w,p:+d.p,sup:d.sup});save()}
-function addProd(e){const d=fd(e);S.prod.push({id:uid(),name:d.name.trim(),g:+d.g,pr:+d.pr,fil:d.fil});save()}
+function addProd(e){const d=fd(e),form=e.target;const nm=(d.name||'').trim(),mainFil=d.pfil||d.fil,mainG=+d.pg||+d.g;if(!nm||!mainFil||!(mainG>0)){alert('Completează denumirea, filamentul principal și gramajul.');return}
+ const extraFils=[];const xFils=form.querySelectorAll('select[name=xfil]'),xGs=form.querySelectorAll('input[name=xfil_g]');
+ xFils.forEach((sel,i)=>{const fId=sel.value,gVal=+(xGs[i]?xGs[i].value:0);if(fId&&gVal>0)extraFils.push({fil:fId,g:gVal})});
+ const allFils=[{fil:mainFil,g:mainG},...extraFils],totalG=sum(allFils,x=>x.g);
+ S.prod.push({id:uid(),name:nm,g:totalG,pr:+d.pr||0,fil:mainFil,fils:allFils});save()}
 const MN=['Ianuarie','Februarie','Martie','Aprilie','Mai','Iunie','Iulie','August','Septembrie','Octombrie','Noiembrie','Decembrie'];
 function rptCard(){return`<div class="card"><h2>Raport lunar de vânzări <small>PDF pentru transmitere</small></h2><form onsubmit="event.preventDefault();pdfSales(this.m.value)"><label>Luna<input type="month" name="m" value="${today().slice(0,7)}" required></label><button class="btn">📄 Export PDF vânzări lunare</button></form></div>`}
 async function pdfSales(m){if(!/^\d{4}-\d{2}$/.test(m||'')){alert('Alege luna.');return}
