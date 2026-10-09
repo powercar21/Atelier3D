@@ -220,7 +220,7 @@ function addMk(e){const d=fd(e),p=pm(d.prod),q=+d.q,g=Math.round((q*p.g+ +d.x)*1
  if(d.xm&&+d.xq>0){const t=mats.find(m=>m.mat==d.xm);t?t.q+=+d.xq:mats.push({mat:d.xm,q:+d.xq})}
  const short=mats.filter(m=>m.q>mstk(m.mat)).map(m=>(mtm(m.mat)||{}).name),nr='PR-'+String(Math.max(0,...S.mk.map(r=>+nrOf(r).slice(3)))+1).padStart(4,'0');
  const r={id:uid(),nr,d:d.d,prod:d.prod,q,fil:d.fil,g,cp:cpg(d.fil),by:cur?cur.name:'',byRole:cur?cur.role:'',mats:mats.map(m=>({...m,cu:mcpu(m.mat)}))};
- S.mk.push(r);r.fa=stock(d.fil).s;r.mats.forEach(m=>m.after=mstk(m.mat));
+ S.mk.push(r);r.fa=stock(d.fil).s;r.mats.forEach(m=>m.after=mstk(m.mat));r.sn=snapOf(r);
  msg=[g>s?`⚠ Consumul (${n(g)} g) depășește stocul (${n(s)} g) – stocul va fi negativ.`:'',short.length?`⚠ Stoc insuficient la: ${short.join(', ')}.`:''].filter(Boolean).join(' ');save()}
 /* ---------- PDF producție (fără biblioteci externe) ---------- */
 let USED={r:{},b:{}};const _hx={};
@@ -241,19 +241,24 @@ function buildPdf(pages,W=595,H=842){const o=[],add=s=>o.push(s),fo={};add('<</T
  let out='%PDF-1.4\n',off=[];o.forEach((b,i)=>{off.push(out.length);out+=`${i+1} 0 obj\n${b}\nendobj\n`});const x=out.length;
  out+=`xref\n0 ${o.length+1}\n0000000000 65535 f \n`+off.map(v=>String(v).padStart(10,'0')+' 00000 n \n').join('')+`trailer\n<</Size ${o.length+1}/Root 1 0 R>>\nstartxref\n${x}\n%%EOF`;
  return Uint8Array.from(out,c=>c.charCodeAt(0))}
-async function pdfMk(id){USED={r:{},b:{}};const r=S.mk.find(x=>x.id==id),p=pm(r.prod),f=fm(r.fil),fa=r.fa??stock(r.fil).s,old=r.fa===undefined,pages=[],G='0.06 0.62 0.54';let c='',y=0;const who=(r.ord||(r.byRole&&r.byRole!='admin'))?(r.by||''):'',co=company();
+function snapOf(r){const p=pm(r.prod),f=fm(r.fil),m={};(r.mats||[]).forEach(x=>{const t=mtm(x.mat);m[x.mat]={n:t?t.name:'(șters)',u:t?t.u:''}});return{p:p?p.name:'(șters)',g:p?p.g:0,f:f?`${f.brand} ${f.mat} ${f.color}`:'(șters)',m}}
+function freezeMk(r){let ch=false;const i=S.mk.indexOf(r);
+ if(r.fa===undefined){r.fa=sum(S.in.filter(x=>x.fil==r.fil&&x.d<=r.d),x=>x.g)-sum(S.mk.slice(0,i+1).filter(x=>x.fil==r.fil),x=>x.g);r.recon=1;ch=true}
+ (r.mats||[]).forEach(m=>{if(m.after===undefined){m.after=sum(S.mi.filter(x=>x.mat==m.mat&&x.d<=r.d),x=>x.q)-sum(S.mk.slice(0,i+1),x=>sum((x.mats||[]).filter(y=>y.mat==m.mat),y=>y.q));r.recon=1;ch=true}});
+ if(!r.sn){r.sn=snapOf(r);ch=true}return ch}
+async function pdfMk(id){USED={r:{},b:{}};const r=S.mk.find(x=>x.id==id);if(freezeMk(r))save();const sn=r.sn,fa=r.fa,old=!!r.recon,pages=[],G='0.06 0.62 0.54';let c='',y=0;const who=(r.ord||(r.byRole&&r.byRole!='admin'))?(r.by||''):'',co=company();
  const T=(x,yy,s,z=10,b=0,al='l',col='0.1 0.12 0.15')=>{const w=tw(s,z,b);c+=`BT ${col} rg /F${b?2:1} ${z} Tf ${(al=='r'?x-w:x).toFixed(1)} ${(842-yy).toFixed(1)} Td ${hx(s,b)} Tj ET\n`};
  const Ln=yy=>{c+=`0.85 0.88 0.9 RG 0.6 w 40 ${842-yy} m 555 ${842-yy} l S\n`},page=()=>{if(c)pages.push(c);c='';y=50};
  const sec=t=>{if(y>720)page();y+=12;T(40,y,t.toUpperCase(),9,1,'l',G);y+=8;Ln(y);y+=20};
  const tab=(cols,rows)=>{cols.forEach(([h,x,a])=>T(x,y,h,8.5,1,a,'0.45 0.5 0.55'));y+=8;Ln(y);y+=16;rows.forEach(rw=>{if(y>790){page()}rw.forEach((v,i)=>T(cols[i][1],y,String(v),10,0,cols[i][2]));y+=20})};
  page();c+=`${G} rg 0 756 595 86 re f\n`;{let z=20;while(tw(co,z,1)>340&&z>10)z--;T(40,44,co,z,1,'l','1 1 1')}T(40,66,'Document de producție – consum materiale',11,0,'l','0.88 1 0.97');T(555,44,nrOf(r),18,1,'r','1 1 1');T(555,66,'Data: '+r.d,11,0,'r','0.88 1 0.97');y=112;
- T(40,y,who?'Operator producție: '+who:'',10);T(555,y,'Generat: '+today(),10,0,'r','0.45 0.5 0.55');y+=6;
- sec('1. Produs fabricat');tab([['Produs',40,'l'],['Cantitate (buc)',370,'r'],['Gramaj / buc',460,'r'],['Total filament',555,'r']],[[p?p.name:'(șters)',r.q,(p?p.g:'-')+' g',n(r.g)+' g']]);
+ T(40,y,who?'Operator producție: '+who:'',10);y+=6;
+ sec('1. Produs fabricat');tab([['Produs',40,'l'],['Cantitate (buc)',370,'r'],['Gramaj / buc',460,'r'],['Total filament',555,'r']],[[sn.p,r.q,sn.g+' g',n(r.g)+' g']]);
  if(r.qc){T(40,y-6,`Control calitate: ${r.qc.by} · ${r.qc.d} · conforme ${r.qc.ok} din ${r.qc.total} (rebuturi ${r.qc.total-r.qc.ok})${r.qc.note?' · '+r.qc.note:''}`.slice(0,120),9,0,'l','0.45 0.5 0.55');y+=12}
- sec('2. Filament consumat');tab([['Filament',40,'l'],['Consum',330,'r'],['Stoc înainte',440,'r'],['Stoc rămas',555,'r']],[[f?`${f.brand} ${f.mat} ${f.color}`:'(șters)',n(r.g)+' g',n(fa+r.g)+' g',n(fa)+' g']]);
- if(old){T(40,y-6,'* Înregistrare veche: stocul rămas reprezintă stocul curent la data exportului.',8,0,'l','0.45 0.5 0.55');y+=8}
+ sec('2. Filament consumat');tab([['Filament',40,'l'],['Consum',330,'r'],['Stoc înainte',440,'r'],['Stoc rămas',555,'r']],[[sn.f,n(r.g)+' g',n(fa+r.g)+' g',n(fa)+' g']]);
+ if(old){T(40,y-6,'* Înregistrare veche: stocurile au fost reconstituite din istoricul înregistrărilor la prima descărcare și rămân neschimbate.',8,0,'l','0.45 0.5 0.55');y+=8}
  sec('3. Materiale și componente consumate');
- if((r.mats||[]).length)tab([['Material',40,'l'],['UM',270,'l'],['Consum',350,'r'],['Stoc înainte',450,'r'],['Stoc rămas',555,'r']],r.mats.map(m=>{const a=m.after??mstk(m.mat);return[(mtm(m.mat)||{name:'(șters)'}).name,mun(m.mat),fq(m.q),fq(a+m.q),fq(a)]}));
+ if((r.mats||[]).length)tab([['Material',40,'l'],['UM',270,'l'],['Consum',350,'r'],['Stoc înainte',450,'r'],['Stoc rămas',555,'r']],r.mats.map(m=>{const a=m.after,z=sn.m[m.mat]||{n:'(șters)',u:''};return[z.n,z.u,fq(m.q),fq(a+m.q),fq(a)]}));
  else{T(40,y,'Nu s-au consumat materiale suplimentare.',10,0,'l','0.45 0.5 0.55');y+=20}
  if(y>700)page();y=Math.max(y+40,740);[['Întocmit – Producție (operator)',40],['Verificat',225],['Aprobat – semnătură',410]].forEach(([l,x])=>{c+=`0.6 0.65 0.7 RG 0.6 w ${x} ${842-y} m ${x+145} ${842-y} l S\n`;T(x,y+13,l,8.5,0,'l','0.45 0.5 0.55')});
  T(40,820,'Document generat de '+co,8,0,'l','0.6 0.65 0.7');pages.push(c);
@@ -269,7 +274,7 @@ function approveQc(id){const o=S.ord.find(x=>x.id==id),p=pm(o.prod),ok=Math.max(
  if(short.length&&!confirm('Stoc insuficient la: '+short.join(', ')+'. Aprobi oricum?'))return;
  const nr='PR-'+String(Math.max(0,...S.mk.map(r=>+nrOf(r).slice(3)))+1).padStart(4,'0'),
   r={id:uid(),nr,d:today(),prod:o.prod,q:ok,fil:p.fil,g,cp:cpg(p.fil),by:o.startedBy||o.sentBy||'',byRole:'op',mats,ord:o.id,qc:{by:cur.name,d:today(),ok,total:o.q,note}};
- S.mk.push(r);r.fa=stock(p.fil).s;r.mats.forEach(m=>m.after=mstk(m.mat));
+ S.mk.push(r);r.fa=stock(p.fil).s;r.mats.forEach(m=>m.after=mstk(m.mat));r.sn=snapOf(r);
  o.st='done';o.doneAt=today();o.mk=r.id;o.qc={by:cur.name,d:today(),ok,note};save();saveOrd()}
 function rejectQc(id){const o=S.ord.find(x=>x.id==id),note=document.getElementById('qn_'+id).value.trim();
  if(!note){alert('Scrie motivul respingerii în Observații.');return}
