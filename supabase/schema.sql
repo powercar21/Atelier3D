@@ -41,7 +41,7 @@ $$;
 do $$
 declare t text;
 begin
-  foreach t in array array['fil','receipts','prod','mk','sal','exp','ord','mat','mi'] loop
+  foreach t in array array['fil','receipts','prod','mk','sal','exp','ord','mat','mi','settings'] loop
     execute format($f$
       create table if not exists public.%I (
         seq        bigint generated always as identity,
@@ -52,7 +52,7 @@ begin
     execute format('alter table public.%I enable row level security', t);
   end loop;
 end $$;
--- fil=filamente, receipts=intrări filament, prod=produse, mk=producție,
+-- settings=setări companie (numele de pe PDF), fil=filamente, receipts=intrări filament, prod=produse, mk=producție,
 -- sal=vânzări, exp=cheltuieli, ord=comenzi, mat=materiale, mi=intrări materiale
 
 -- 3) Reguli de acces (RLS) -------------------------------------------------
@@ -67,14 +67,14 @@ create policy profiles_admin_read on public.profiles for select to authenticated
 do $$
 declare t text;
 begin
-  foreach t in array array['fil','receipts','prod','mk','sal','exp','ord','mat','mi'] loop
+  foreach t in array array['fil','receipts','prod','mk','sal','exp','ord','mat','mi','settings'] loop
     execute format('drop policy if exists admin_all on public.%I', t);
     execute format($f$create policy admin_all on public.%I for all to authenticated
                       using (public.my_role() = 'admin') with check (public.my_role() = 'admin')$f$, t);
   end loop;
 
   -- operator și control calitate: pot CITI datele de care are nevoie interfața lor
-  foreach t in array array['fil','receipts','prod','mk','mat','mi','ord'] loop
+  foreach t in array array['fil','receipts','prod','mk','mat','mi','ord','settings'] loop
     execute format('drop policy if exists staff_read on public.%I', t);
     execute format($f$create policy staff_read on public.%I for select to authenticated
                       using (public.my_role() in ('op','qc'))$f$, t);
@@ -100,7 +100,7 @@ grant select, insert, update, delete on all tables in schema public to authentic
 do $$
 declare t text;
 begin
-  foreach t in array array['fil','receipts','prod','mk','sal','exp','ord','mat','mi'] loop
+  foreach t in array array['fil','receipts','prod','mk','sal','exp','ord','mat','mi','settings'] loop
     begin
       execute format('alter publication supabase_realtime add table public.%I', t);
     exception when duplicate_object then null;
