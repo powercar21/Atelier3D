@@ -107,3 +107,32 @@ begin
     end;
   end loop;
 end $$;
+
+-- 5) Configurator public: setări + comenzi online -----------------------------
+--    Pagina publică NU accesează baza de date direct: citește configurația prin /api/config
+--    și trimite comenzile prin /api/order (funcții pe server, cu cheia service_role).
+do $$
+declare t text;
+begin
+  foreach t in array array['site_config','web_orders'] loop
+    execute format($f$
+      create table if not exists public.%I (
+        seq        bigint generated always as identity,
+        id         text primary key,
+        data       jsonb not null,
+        updated_at timestamptz not null default now()
+      )$f$, t);
+    execute format('alter table public.%I enable row level security', t);
+    execute format('drop policy if exists admin_all on public.%I', t);
+    execute format($f$create policy admin_all on public.%I for all to authenticated
+                      using (public.my_role() = 'admin') with check (public.my_role() = 'admin')$f$, t);
+    execute format('revoke all on public.%I from anon', t);
+    execute format('grant select, insert, update, delete on public.%I to authenticated', t);
+    begin
+      execute format('alter publication supabase_realtime add table public.%I', t);
+    exception when duplicate_object then null;
+    end;
+  end loop;
+end $$;
+-- site_config = setările configuratorului (mărimi, culori, prețuri, livrare)
+-- web_orders  = comenzile primite de pe pagina publică (vizibile doar pentru admin)

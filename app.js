@@ -6,14 +6,15 @@ const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'
 const today=()=>new Date().toISOString().slice(0,10),n=v=>Math.round(v).toLocaleString('ro-RO'),L=v=>v.toLocaleString('ro-RO',{minimumFractionDigits:2,maximumFractionDigits:2})+' lei';
 const sum=(a,f)=>a.reduce((x,r)=>x+f(r),0),fm=id=>S.fil.find(f=>f.id==id),pm=id=>S.prod.find(p=>p.id==id),pn=id=>(pm(id)||{name:'(șters)'}).name;
 const fname=id=>{const f=fm(id);return f?`<span class="dot" style="background:${f.hex}"></span>${esc(f.brand)} ${esc(f.mat)} ${esc(f.color)}`:'(șters)'};
-function stock(id){const i=sum(S.in.filter(r=>r.fil==id),r=>r.g),u=sum(S.mk,r=>r.fils?sum(r.fils.filter(x=>x.fil==id),x=>x.g):(r.fil==id?r.g:0));return{i,u,s:i-u}}
+const rfl=r=>r.fl&&r.fl.length?r.fl:[{fil:r.fil,g:r.g,cp:r.cp,fa:r.fa}];
+function stock(id){const i=sum(S.in.filter(r=>r.fil==id),r=>r.g),u=sum(S.mk,r=>sum(rfl(r).filter(x=>x.fil==id),x=>x.g));return{i,u,s:i-u}}
 function cpg(id){const r=S.in.filter(x=>x.fil==id),g=sum(r,x=>x.g);return g>0&&sum(r,x=>x.q*x.p)>0?sum(r,x=>x.q*x.p)/g:((fm(id)||{}).pk||0)/1000}
 const fq=v=>(Math.round(v*100)/100).toLocaleString('ro-RO'),mtm=id=>S.mat.find(m=>m.id==id),mname=id=>{const m=mtm(id);return m?esc(m.name):'(șters)'},mun=id=>(mtm(id)||{u:''}).u;
 const mstk=id=>sum(S.mi.filter(r=>r.mat==id),r=>r.q)-sum(S.mk,r=>sum((r.mats||[]).filter(x=>x.mat==id),x=>x.q));
 const mcpu=id=>{const r=S.mi.filter(x=>x.mat==id),q=sum(r,x=>x.q),t=sum(r,x=>x.tot);return q>0&&t>0?t/q:((mtm(id)||{}).pu||0)};
-const mcost=r=>sum(r.mats||[],x=>x.q*(x.cu??mcpu(x.mat))),fcost=r=>r.fils?sum(r.fils,x=>x.g*(x.cp??cpg(x.fil))):r.g*(r.cp??cpg(r.fil)),nrOf=r=>r.nr||'PR-'+String(S.mk.indexOf(r)+1).padStart(4,'0');
+const mcost=r=>sum(r.mats||[],x=>x.q*(x.cu??mcpu(x.mat))),fcost=r=>sum(rfl(r),x=>x.g*(x.cp??cpg(x.fil))),nrOf=r=>r.nr||'PR-'+String(S.mk.indexOf(r)+1).padStart(4,'0');
 const matOpts=()=>S.mat.map(m=>`<option value="${m.id}">${esc(m.name)} (${fq(mstk(m.id))} ${m.u})</option>`).join('');
-function ucost(p){const r=S.mk.filter(x=>x.prod==p.id),q=sum(r,x=>x.q);if(q)return sum(r,x=>fcost(x)+mcost(x))/q;const fc=(p.fils&&p.fils.length)?sum(p.fils,x=>x.g*cpg(x.fil)):p.g*cpg(p.fil);return fc+sum(p.bom||[],b=>b.q*mcpu(b.mat))}
+function ucost(p){const r=S.mk.filter(x=>x.prod==p.id),q=sum(r,x=>x.q);return q?sum(r,x=>fcost(x)+mcost(x))/q:p.g*cpg(p.fil)+sum(p.bom||[],b=>b.q*mcpu(b.mat))}
 const made=id=>sum(S.mk.filter(r=>r.prod==id),r=>r.q),sold=id=>sum(S.sal.filter(r=>r.prod==id),r=>r.q),avail=id=>made(id)-sold(id);
 const rev=r=>r.q*r.pr,revTot=r=>r.q*r.pr+(r.liv||0),cogs=r=>r.q*(pm(r.prod)?ucost(pm(r.prod)):0);
 const fplain=id=>{const f=fm(id);return f?`${f.brand} ${f.mat} ${f.color}`:'(șters)'};
@@ -98,14 +99,17 @@ const need=(ok,t)=>ok?'':`<div class="e">${t}</div>`;
 const del_=(k,id)=>`<button class="x" onclick="del('${k}','${id}')">✕</button>`;
 const kpi=(i,b,s,c='')=>`<div class="${c}"><em>${i}</em><b>${b}</b><span>${s}</span></div>`;
 const pc=v=>`<b class="${v<0?'no':'ok'}">${L(v)}</b>`;
-const fstat=(p,q)=>{const fils=(p.fils&&p.fils.length)?p.fils:(p.fil?[{fil:p.fil,g:p.g}]:[]);if(!fils.length)return'';const bad=fils.map(x=>{const s=stock(x.fil).s,nd=q*x.g;return s>=nd?null:(s>0?'lo':'no')}).filter(Boolean);const st=bad.includes('no')?['no','✗ Filament epuizat']:bad.includes('lo')?['lo','⚠ Stoc filament insuficient']:['ok','✓ Filament în stoc'];return`<div class="om">${fils.map(x=>fname(x.fil)).join(' + ')}<br><span class="pill ${st[0]}" style="margin-top:6px">${st[1]}</span></div>`};
-function addExtraFilRow(cid='filRows'){const c=document.getElementById(cid);if(!c)return;const div=document.createElement('div');div.className='bl2 fil-row';div.style.marginTop='6px';div.innerHTML=`<label>Plastic suplimentar<select name="xfil"><option value="">— alege —</option>${filOpts()}</select></label><label>Gramaj (g)<input type="number" step="0.1" min="0.1" name="xfil_g" placeholder="ex. 25"></label><button type="button" class="x" style="align-self:end;margin-bottom:6px" onclick="this.parentElement.remove()">✕</button>`;c.appendChild(div)}
+const fnames=r=>rfl(r).map(x=>fname(x.fil)+(r.fl&&r.fl.length>1?' <small>'+n(x.g)+' g</small>':'')).join('<br>');
+const ogram=o=>{const p=pm(o.prod);return o.fils&&o.fils.length?sum(o.fils,x=>x.g):(p?p.g:0)};
+const fstatO=(o,p)=>{if(o.fils&&o.fils.length)return o.fils.map(x=>{const f=fm(x.fil);if(!f)return'';const s=stock(x.fil).s,need=o.q*x.g,c=s>=need?['ok','✓']:s>0?['lo','⚠']:['no','✗'];return`<div class="om">${fname(f.id)} · ${n(need)} g <span class="pill ${c[0]}">${c[1]} ${n(Math.max(s,0))} g disponibil</span></div>`}).join('');return fm(p.fil)?fstat(p,o.q):''};
+const fstat=(p,q)=>{const f=fm(p.fil),s=stock(p.fil).s,need=q*p.g,c=s>=need?['ok','✓ În stoc']:s>0?['lo','⚠ Insuficient']:['no','✗ Epuizat'];
+ return`<div class="om">${fname(f.id)}<br><span class="pill ${c[0]}" style="margin-top:6px">${c[1]} · ${n(Math.max(s,0))} g disponibil</span></div>`};
 const views={
 home(){const t=tot(),low=S.fil.filter(f=>stock(f.id).s<=f.min),lowM=S.mat.filter(m=>mstk(m.id)<=m.min),mo=today().slice(0,7),mk=S.mk.filter(r=>r.d.startsWith(mo)),ms=mstat(mo);
  return`<div class="kpi">${ADM()?kpi('💰',L(t.P),'Profit total','pr'):''}${kpi('🛒',L(ms.R),'Vânzări luna aceasta')}${kpi('🧵',(Math.round(sum(S.fil,f=>stock(f.id).s)/100)/10).toLocaleString('ro-RO')+' kg','Stoc filament')}${kpi('📦',sum(S.prod,p=>avail(p.id))+' buc','Produse finite în stoc')}${kpi('🏭',sum(mk,r=>r.q)+' buc','Produse luna aceasta ('+n(sum(mk,r=>r.g))+' g)')}${kpi('📋',S.ord.filter(o=>o.st!='done').length,'Comenzi active')}${kpi('🔍',S.ord.filter(o=>o.st=='qc').length,'La control calitate')}${kpi('⚠️',low.length,'Filamente sub minim')}</div>
  <div class="g2"><div class="card"><h2>Stoc redus</h2>${lowM.map(m=>`<div class="row"><span>🎨 ${esc(m.name)}</span><b class="${mstk(m.id)<=0?'no':'lo'}">${fq(mstk(m.id))} ${m.u}</b></div>`).join('')}${low.length?low.map(f=>`<div class="row"><span>${fname(f.id)}</span><b class="${stock(f.id).s<=0?'no':'lo'}">${n(stock(f.id).s)} g</b></div>`).join(''):(lowM.length?'':'<span class="ok"><b>Totul este în regulă ✓</b></span>')}</div>
  <div class="card"><h2>Ultimele vânzări</h2>${tbl(['Data','Produs','Cant.','Total'],S.sal.slice(-5).reverse().map(r=>[r.d,esc(pn(r.prod)),r.q,L(revTot(r))]))}</div></div>
- <div class="card"><h2>Ultimele producții</h2>${tbl(['Data','Produs','Cant.','Filament','Consum'],S.mk.slice(-5).reverse().map(r=>[r.d,esc(pn(r.prod)),r.q,fname(r.fil),n(r.g)+' g']))}</div>
+ <div class="card"><h2>Ultimele producții</h2>${tbl(['Data','Produs','Cant.','Filament','Consum'],S.mk.slice(-5).reverse().map(r=>[r.d,esc(pn(r.prod)),r.q,fnames(r),n(r.g)+' g']))}</div>
  <button class="btn ghost" onclick="exp_()">⬇ Descarcă copie de siguranță</button> <label class="btn ghost" style="display:inline-grid;place-items:center;cursor:pointer">⬆ Importă copie<input type="file" accept=".json,application/json" hidden onchange="imp(this)"></label>`},
 fil(){return`<div class="card"><h2>Adaugă filament în catalog</h2><form onsubmit="addFil(event)">
  <label>Producător<input name="brand" required placeholder="ex. Bambu"></label><label>Material<input name="mat" required placeholder="PLA, PETG…"></label>
@@ -125,13 +129,10 @@ mat(){const MC=['Vopsea','Piesă','Componentă','Consumabil','Altele'];return`<d
 <div class="card"><h2>Stoc materiale</h2><div class="tw">${tbl(['Material','Categorie','Intrat','Consumat','Stoc','Cost / UM','Valoare',''],S.mat.map(m=>{const i=sum(S.mi.filter(r=>r.mat==m.id),r=>r.q),k=mstk(m.id);return[esc(m.name),m.cat,fq(i)+' '+m.u,fq(i-k)+' '+m.u,`<span class="pill ${k<=0?'no':k<=m.min?'lo':'ok'}">${fq(k)} ${m.u}</span>`,L(mcpu(m.id)),L(Math.max(0,k)*mcpu(m.id)),del_('mat',m.id)]}))}</div></div>
 <div class="card"><h2>Istoric intrări materiale</h2><div class="tw">${tbl(['Data','Material','Cantitate','Valoare','Preț / UM','Factură','Furnizor',''],S.mi.slice().reverse().map(r=>[r.d,mname(r.mat),fq(r.q)+' '+mun(r.mat),L(r.tot),L(r.tot/r.q),esc(r.inv||'-'),esc(r.sup||'-'),del_('mi',r.id)]))}</div></div>`},
 prod(){return`<div class="card"><h2>Produs nou</h2><form onsubmit="addProd(event)">
- <div class="bl2"><label>Denumire produs<input name="name" required></label><label>Preț de vânzare (lei)<input type="number" step="0.01" min="0" name="pr" value="0"></label></div>
- <div style="margin-top:10px"><b>Tipuri de plastic / filamente folosite:</b>
-   <div id="pFilRows"><div class="bl2 fil-row" style="margin-top:6px"><label>Filament principal<select name="pfil" required><option value="">— alege —</option>${filOpts()}</select></label><label>Gramaj (g)<input type="number" step="0.1" min="0.1" name="pg" required placeholder="ex. 100"></label></div></div>
-   <button type="button" class="btn ghost" style="margin-top:8px;height:32px;font-size:13px" onclick="addExtraFilRow('pFilRows')">➕ Adaugă alt tip de plastic (multi-color / multi-material)</button>
- </div>
- <button class="btn" style="margin-top:12px">Adaugă produs</button></form></div>
- <div class="card"><h2>Produse</h2><div class="tw">${tbl(['Produs','Gramaj & Filamente','Preț vânzare','Cost producție','Marjă / buc','Produse','Vândute','În stoc',''],S.prod.map(p=>{const c=ucost(p),fls=(p.fils&&p.fils.length)?p.fils.map(x=>`${fname(x.fil)} (${x.g}g)`).join(' + '):fname(p.fil);return[esc(p.name),`<b>${p.g} g</b><br><small>${fls}</small>`,L(p.pr||0),L(c),pc((p.pr||0)-c),made(p.id),sold(p.id),`<b>${avail(p.id)}</b>`,del_('prod',p.id)]}))}</div></div>
+ <label>Denumire produs<input name="name" required></label><label>Gramaj / bucată (g)<input type="number" step="0.1" min="0.1" name="g" required></label>
+ <label>Preț de vânzare (lei)<input type="number" step="0.01" min="0" name="pr" value="0"></label><label>Filament implicit<select name="fil"><option value="">—</option>${filOpts()}</select></label>
+ <button class="btn">Adaugă produs</button></form></div>
+ <div class="card"><h2>Produse</h2><div class="tw">${tbl(['Produs','Gramaj','Preț vânzare','Cost producție','Marjă / buc','Produse','Vândute','În stoc',''],S.prod.map(p=>{const c=ucost(p);return[esc(p.name),p.g+' g',L(p.pr||0),L(c),pc((p.pr||0)-c),made(p.id),sold(p.id),`<b>${avail(p.id)}</b>`,del_('prod',p.id)]}))}</div></div>
  <div class="card"><h2>Rețetă: materiale per bucată <small>vopsea, piese, componente</small></h2>${need(S.prod.length&&S.mat.length,'Adaugă produse și materiale.')}<form onsubmit="addBom(event)"><label>Produs<select name="prod">${S.prod.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('')}</select></label><label>Material<select name="mat">${matOpts()}</select></label><label>Cantitate / bucată<input type="number" step="any" min="0.001" name="q" required></label><button class="btn">Adaugă în rețetă</button></form>
  <div class="tw">${tbl(['Produs','Material','Cantitate / buc',''],S.prod.flatMap(p=>(p.bom||[]).map(b=>[esc(p.name),mname(b.mat),fq(b.q)+' '+mun(b.mat),`<button class="x" onclick="delBom('${p.id}','${b.mat}')">✕</button>`])))}</div></div>`},
 
@@ -140,7 +141,7 @@ mk(){return`<div class="card"><h2>Înregistrează producție</h2>${need(S.prod.l
  <label>Produs<select name="prod" required onchange="this.form.fil.value=(pm(this.value)||{}).fil||this.form.fil.value;upBom(this.form)">${S.prod.map(p=>`<option value="${p.id}">${esc(p.name)} (${p.g} g)</option>`).join('')}</select></label>
  <label>Cantitate (buc)<input type="number" name="q" min="1" value="1" required oninput="upBom(this.form)"></label><label>Filament folosit<select name="fil" required>${filOpts()}</select></label>
  <label>Gramaj extra / suport (g)<input type="number" step="0.1" min="0" name="x" value="0"></label><div id="bomBox" style="grid-column:1/-1">${bomBox(S.prod[0]&&S.prod[0].id,1)}</div><button class="btn">Înregistrează</button></form><div class="msg">${msg}</div></div>
- <div class="card"><h2>Istoric producție</h2><div class="tw">${tbl(['Nr.','Data','Produs','Cant.','Filament','Consum','Materiale','Cost','PDF',''],S.mk.slice().reverse().map(r=>[nrOf(r)+(r.qc?' ✓ QC':''),r.d,esc(pn(r.prod)),r.q,fname(r.fil),n(r.g)+' g',(r.mats||[]).length?r.mats.map(m=>mname(m.mat)).join(', '):'-',L(fcost(r)+mcost(r)),`<button class="btn ghost" style="height:34px;padding:0 12px" onclick="pdfMk('${r.id}')">📄 PDF</button>`,del_('mk',r.id)]))}</div></div>`},
+ <div class="card"><h2>Istoric producție</h2><div class="tw">${tbl(['Nr.','Data','Produs','Cant.','Filament','Consum','Materiale','Cost','PDF',''],S.mk.slice().reverse().map(r=>[nrOf(r)+(r.qc?' ✓ QC':''),r.d,esc(pn(r.prod)),r.q,fnames(r),n(r.g)+' g',(r.mats||[]).length?r.mats.map(m=>mname(m.mat)).join(', '):'-',L(fcost(r)+mcost(r)),`<button class="btn ghost" style="height:34px;padding:0 12px" onclick="pdfMk('${r.id}')">📄 PDF</button>`,del_('mk',r.id)]))}</div></div>`},
 sal(){const t=tot();return`<div class="kpi">${kpi('🛒',sum(S.sal,r=>r.q)+' buc','Total vândute')}${kpi('💵',L(t.R),'Venituri totale')}${kpi('🚚',L(sum(S.sal,r=>r.liv||0)),'Livrări încasate')}${kpi('📦',sum(S.prod,p=>avail(p.id))+' buc','Produse finite în stoc')}</div>
  <div class="card"><h2>Înregistrează vânzare</h2>${need(S.prod.length,'Adaugă mai întâi produse.')}<form onsubmit="addSal(event)">
  <label>Data<input type="date" name="d" value="${today()}" required></label>
@@ -172,7 +173,7 @@ stk(){const l=S.fil.slice().sort((a,b)=>(a.mat+a.color).localeCompare(b.mat+b.co
 qc(){const w=S.ord.filter(o=>o.st=='qc').sort((a,b)=>(a.sentAt||'').localeCompare(b.sentAt||'')),mo=today().slice(0,7),dn=S.ord.filter(o=>o.qc&&o.qc.d.startsWith(mo));
  const card=o=>{const p=pm(o.prod),f=p&&fm(p.fil),bom=(p&&p.bom)||[];return`<div class="fc"><b style="font-size:16px">${o.q} × ${esc(p?p.name:'(produs șters)')}</b><small>${o.client?esc(o.client)+' · ':''}comanda din ${o.d}</small>
  <div class="om">Trimisă de ${esc(o.sentBy||'-')} · ${o.sentAt||''}</div>${o.note?`<div class="on">${esc(o.note)}</div>`:''}
- <div class="om">La aprobare se scad din stoc:<br>🧵 ${f?fname(f.id)+' – '+n(o.q*p.g)+' g':'<b class="no">Setează filamentul implicit al produsului!</b>'}${bom.map(b=>`<br>🎨 ${mname(b.mat)} – ${fq(b.q*o.q)} ${mun(b.mat)}`).join('')}</div>
+ <div class="om">La aprobare se scad din stoc:<br>🧵 ${(o.fils&&o.fils.length)?o.fils.map(x=>fname(x.fil)+' – '+n(o.q*x.g)+' g').join('<br>🧵 '):f?fname(f.id)+' – '+n(o.q*p.g)+' g':'<b class="no">Setează filamentul implicit al produsului!</b>'}${bom.map(b=>`<br>🎨 ${mname(b.mat)} – ${fq(b.q*o.q)} ${mun(b.mat)}`).join('')}</div>
  <label style="margin-top:12px">Bucăți conforme (din ${o.q})<input type="number" id="qa_${o.id}" min="0" max="${o.q}" value="${o.q}"></label>
  <label style="margin-top:8px">Observații<input id="qn_${o.id}" placeholder="obligatoriu la respingere / rebuturi"></label>
  <div class="oa"><button class="btn" style="background:var(--ok)" onclick="approveQc('${o.id}')">✓ Aprobă</button><button class="btn" style="background:var(--d)" onclick="rejectQc('${o.id}')">✗ Respinge</button></div></div>`};
@@ -185,7 +186,7 @@ ord(){const ST={new:['Noi','#e8912c'],wip:['În lucru','#0f9d8a'],qc:['La contro
   const a=o.st=='new'?`<button class="btn" onclick="setSt('${o.id}','wip')">▶ Începe</button>`:o.st=='wip'?`<button class="btn" onclick="setSt('${o.id}','qc')">🔍 Trimite la calitate</button><button class="btn ghost" onclick="setSt('${o.id}','new')">↩</button>`:o.st=='qc'?'<span class="pill" style="background:rgba(139,92,246,.15);color:#8b5cf6">⏳ Așteaptă controlul</span>':(o.mk&&o.qc?`<span class="pill ok">✓ În stoc: ${o.qc.ok} buc</span>`:`<button class="btn ghost" onclick="setSt('${o.id}','wip')">↩ Redeschide</button>`);
   return`<div class="oc ${o.pri=='u'?'urg':''}"><div class="oh"><b>${o.q} × ${esc(p?p.name:'(produs șters)')}</b>${o.pri=='u'?'<span class="pill no">Urgent</span>':''}</div>
   ${o.client?`<div class="om">👤 ${esc(o.client)}</div>`:''}<div class="om ${ov?'no':''}">📅 ${o.due||'fără termen'}${ov?' · întârziată':''}${o.doneAt?' · finalizată '+o.doneAt:''}</div>
-  ${p?`<div class="om">🧵 ~${n(o.q*p.g)} g filament</div>`:''}${o.st!='done'&&p&&fm(p.fil)?fstat(p,o.q):''}${o.note?`<div class="on">${esc(o.note)}</div>`:''}
+  ${p?`<div class="om">🧵 ~${n(o.q*ogram(o))} g filament</div>`:''}${o.st!='done'&&p?fstatO(o,p):''}${o.note?`<div class="on">${esc(o.note)}</div>`:''}
   ${o.rej&&o.st=='wip'?`<div class="on" style="color:var(--d)">✗ Respinsă la calitate (${esc(o.rej.by)}): ${esc(o.rej.reason)}</div>`:''}${o.qc?`<div class="om">✅ Control: ${esc(o.qc.by)} · ${o.qc.ok}/${o.q} conforme</div>`:''}<div class="oa">${a}${ADM()?`<button class="x" onclick="delOrd('${o.id}')">✕</button>`:''}</div></div>`};
  const col=k=>{let l=list.filter(o=>o.st==k);const c=l.length;if(k=='done')l=l.sort((a,b)=>(b.doneAt||'').localeCompare(a.doneAt||'')).slice(0,10);
   return`<div class="kc" style="--c2:${ST[k][1]}"><h3>${ST[k][0]}<span>${c}</span></h3>${l.map(card).join('')||'<div class="e">Nicio comandă.</div>'}</div>`};
@@ -193,28 +194,29 @@ ord(){const ST={new:['Noi','#e8912c'],wip:['În lucru','#0f9d8a'],qc:['La contro
  <label>Client<input name="client" required></label><label>Produs<select name="prod" required onchange="togNew(this)">${S.prod.map(p=>`<option value="${p.id}">${esc(p.name)} (${p.g} g)</option>`).join('')}<option value="__new"${S.prod.length?'':' selected'}>➕ Produs nou (nu este în Produse)</option></select></label>
  <label>Cantitate<input type="number" name="q" min="1" value="1" required></label><label>Termen<input type="date" name="due"></label>
  <label>Prioritate<select name="pri"><option value="n">Normală</option><option value="u">Urgentă</option></select></label><label>Observații<input name="note" placeholder="culoare, detalii…"></label>
- <div id="newProd" class="bb" style="grid-column:1/-1" ${S.prod.length?'hidden':''}><b>Produs nou / personalizat – se înregistrează automat în Produse</b>
- <div class="bl2"><label>Denumire produs<input name="pname" ${S.prod.length?'':'required'}></label><label>Preț vânzare (lei)<input type="number" step="0.01" min="0" name="ppr" value="0"></label></div>
- <div style="margin-top:10px"><b>Tipuri de plastic / filamente folosite:</b>
-   <div id="filRows"><div class="bl2 fil-row" style="margin-top:6px"><label>Filament principal<select name="pfil" ${S.prod.length?'':'required'}><option value="">— alege —</option>${filOpts()}</select></label><label>Gramaj (g)<input type="number" step="0.1" min="0.1" name="pg" ${S.prod.length?'':'required'} placeholder="ex. 100"></label></div></div>
-   <button type="button" class="btn ghost" style="margin-top:8px;height:32px;font-size:13px" onclick="addExtraFilRow('filRows')">➕ Adaugă alt tip de plastic (multi-color / multi-material)</button>
- </div>
- ${S.fil.length?'':'<div class="om no" style="margin-top:8px">Adaugă mai întâi un filament în catalog.</div>'}</div>
+ <div id="multiBox" class="bb" style="grid-column:1/-1"><label class="chk" style="margin-top:0"><input type="checkbox" name="mfOn" onchange="togMulti(this)">Mai multe tipuri de plastic în această comandă</label>
+ <div id="mfRows" style="display:none"><div id="mfList"></div><button type="button" class="ghost2" style="margin-top:8px" onclick="addMfRow()">+ Adaugă filament</button><div class="om" id="mfTot" style="margin-top:8px"></div></div></div>
+ <div id="newProd" class="bb" style="grid-column:1/-1" ${S.prod.length?'hidden':''}><b>Produs nou – se înregistrează automat în Produse</b>
+ <div class="bl2"><label>Denumire produs<input name="pname" ${S.prod.length?'':'required'}></label><label>Gramaj / bucată (g)<input type="number" step="0.1" min="0.1" name="pg" ${S.prod.length?'':'required'}></label><label>Filament folosit<select name="pfil" ${S.prod.length?'':'required'}><option value="">— alege —</option>${filOpts()}</select></label><label>Preț vânzare (lei)<input type="number" step="0.01" min="0" name="ppr" value="0"></label></div>
+ ${S.fil.length?'':'<div class="om no">Adaugă mai întâi un filament în catalog.</div>'}</div>
  <button class="btn">Adaugă comanda</button></form></div>`:'';
  return f+`<div class="kb">${['new','wip','qc','done'].map(col).join('')}</div>`},
 usr(){return`<div class="card"><h2>Contul meu</h2><form onsubmit="doPw(event)"><label>Parola actuală<input type="password" name="o" required autocomplete="current-password"></label><label>Parola nouă (min. 6)<input type="password" name="p" minlength="6" required autocomplete="new-password"></label><button class="btn">Schimbă parola</button></form><div class="msg">${msg}</div></div>`+(ADM()?`<div class="card"><h2>Setări companie <small>apare pe documentele PDF</small></h2><form onsubmit="saveCfg(event)"><label>Denumirea companiei<input name="company" required maxlength="80" value="${esc(company())}"></label><button class="btn">Salvează</button></form><div class="msg" style="color:var(--ok)">${cfgMsg}</div></div><div class="card"><h2>Adaugă utilizator</h2><form onsubmit="addUser(event)"><label>Nume<input name="name" required></label><label>Email<input type="email" name="un" required autocapitalize="off"></label><label>Parolă (min. 6)<input type="password" name="pw" minlength="6" required></label><label>Rol<select name="role"><option value="op">Operator (Comenzi + Stoc filament)</option><option value="qc">Control calitate (doar pagina de calitate)</option><option value="admin">Administrator</option></select></label><button class="btn">Adaugă</button></form></div><div class="card"><h2>Utilizatori</h2><div class="tw">${tbl(['Nume','Email','Rol',''],U.map(u=>[esc(u.name),esc(u.email||''),RL[u.role],`<button class="x" title="Resetează parola" onclick="resetPw('${u.id}')">🔑</button>${u.id==cur.id?'':`<button class="x" onclick="delUser('${u.id}')">✕</button>`}`]))}</div></div>`:'')}
 };
 function tbl(h,rows){return rows.length?`<table><tr class="hd">${h.map(x=>`<th>${x}</th>`).join('')}</tr>${rows.map(r=>`<tr>${r.map((c,i)=>`<td data-label="${h[i]||''}">${c}</td>`).join('')}</tr>`).join('')}</table>`:'<div class="e">Nicio înregistrare.</div>'}
 const fd=e=>{e.preventDefault();return Object.fromEntries(new FormData(e.target))};
-function togNew(sel){const on=sel.value=='__new',b=document.getElementById('newProd');b.hidden=!on;b.querySelectorAll('input[name=pname],input[name=pg],select[name=pfil]').forEach(x=>x.required=on);if(on)b.querySelector('input[name=pname]').focus()}
-function addOrd(e){const d=fd(e),form=e.target;let pid=d.prod,np=false;
- if(pid=='__new'){const nm=(d.pname||'').trim(),mainFil=d.pfil,mainG=+d.pg;if(!nm||!(mainG>0)||!mainFil){alert('Completează denumirea, gramajul și filamentul principal al produsului nou.');return}
-  const extraFils=[];const xFils=form.querySelectorAll('select[name=xfil]'),xGs=form.querySelectorAll('input[name=xfil_g]');
-  xFils.forEach((sel,i)=>{const fId=sel.value,gVal=+(xGs[i]?xGs[i].value:0);if(fId&&gVal>0)extraFils.push({fil:fId,g:gVal})});
-  const allFils=[{fil:mainFil,g:mainG},...extraFils],totalG=sum(allFils,x=>x.g);
+function reqNew(){const f=document.querySelector('form[onsubmit^=addOrd]');if(!f)return;const nw=f.prod.value=='__new',mul=f.mfOn.checked,b=document.getElementById('newProd');b.querySelector('input[name=pname]').required=nw;b.querySelectorAll('input[name=pg],select[name=pfil]').forEach(x=>x.required=nw&&!mul)}
+function togNew(sel){const on=sel.value=='__new',b=document.getElementById('newProd');b.hidden=!on;reqNew();if(on)b.querySelector('input[name=pname]').focus()}
+const mfRow=()=>`<div class="bl2 mfr" style="align-items:end"><label>Filament<select name="mf_f" onchange="updMf()"><option value="">— alege —</option>${filOpts()}</select></label><label>Grame / bucată<input type="number" step="0.1" min="0" name="mf_g" oninput="updMf()"></label><button type="button" class="x" onclick="this.parentNode.remove();updMf()">✕</button></div>`;
+function addMfRow(){document.getElementById('mfList').insertAdjacentHTML('beforeend',mfRow())}
+function updMf(){const f=document.querySelector('form[onsubmit^=addOrd]'),gs=[...f.querySelectorAll('input[name=mf_g]')].reduce((a,x)=>a+(+x.value||0),0),p=pm(f.prod.value);document.getElementById('mfTot').textContent='Total per bucată: '+n(gs)+' g'+(p&&f.prod.value!='__new'?' (produsul are '+p.g+' g)':'')}
+function togMulti(cb){document.getElementById('mfRows').style.display=cb.checked?'block':'none';if(cb.checked&&!document.querySelector('#mfList .mfr')){addMfRow();addMfRow()}reqNew();updMf()}
+function addOrd(e){const d=fd(e),F=new FormData(e.target);let pid=d.prod,np=false,fils=null;
+ if(d.mfOn){const fs=F.getAll('mf_f'),gs=F.getAll('mf_g'),m={};fs.forEach((f,i)=>{const g=+gs[i];if(f&&g>0)m[f]=Math.round(((m[f]||0)+g)*10)/10});fils=Object.entries(m).map(([fil,g])=>({fil,g}));if(!fils.length){alert('Adaugă cel puțin un filament cu gramaj.');return}}
+ if(pid=='__new'){const nm=(d.pname||'').trim(),g=fils?Math.round(sum(fils,x=>x.g)*10)/10:+d.pg,pf=fils?fils[0].fil:d.pfil;if(!nm||!(g>0)||!pf){alert('Completează denumirea, gramajul și filamentul produsului nou.');return}
   const ex=S.prod.find(p=>p.name.trim().toLowerCase()==nm.toLowerCase());
-  if(ex)pid=ex.id;else{pid=uid();S.prod.push({id:pid,name:nm,g:totalG,pr:+d.ppr||0,fil:mainFil,fils:allFils});np=true}}
- S.ord.push({id:uid(),d:today(),client:d.client.trim(),prod:pid,q:+d.q,due:d.due,pri:d.pri,note:d.note.trim(),st:'new'});if(np)save();saveOrd()}
+  if(ex)pid=ex.id;else{pid=uid();S.prod.push({id:pid,name:nm,g,pr:+d.ppr||0,fil:pf});np=true}}
+ S.ord.push({id:uid(),d:today(),client:d.client.trim(),prod:pid,q:+d.q,due:d.due,pri:d.pri,note:d.note.trim(),st:'new',...(fils?{fils}:{})});if(np)save();saveOrd()}
 function setSt(id,st){const o=S.ord.find(x=>x.id==id);o.st=st;if(st=='qc'){o.sentBy=cur.name;o.sentAt=today();delete o.rej}if(st=='wip'&&!o.startedBy)o.startedBy=cur.name;if(st=='done')o.doneAt=today();else delete o.doneAt;saveOrd()}
 function delOrd(id){if(!confirm('Ștergi comanda?'))return;S.ord=S.ord.filter(x=>x.id!=id);saveOrd()}
 function bomBox(pid,q){const p=pm(pid),b=(p&&p.bom)||[];
@@ -251,9 +253,11 @@ function buildPdf(pages,W=595,H=842){const o=[],add=s=>o.push(s),fo={};add('<</T
  let out='%PDF-1.4\n',off=[];o.forEach((b,i)=>{off.push(out.length);out+=`${i+1} 0 obj\n${b}\nendobj\n`});const x=out.length;
  out+=`xref\n0 ${o.length+1}\n0000000000 65535 f \n`+off.map(v=>String(v).padStart(10,'0')+' 00000 n \n').join('')+`trailer\n<</Size ${o.length+1}/Root 1 0 R>>\nstartxref\n${x}\n%%EOF`;
  return Uint8Array.from(out,c=>c.charCodeAt(0))}
-function snapOf(r){const p=pm(r.prod),f=fm(r.fil),m={};(r.mats||[]).forEach(x=>{const t=mtm(x.mat);m[x.mat]={n:t?t.name:'(șters)',u:t?t.u:''}});return{p:p?p.name:'(șters)',g:p?p.g:0,f:f?`${f.brand} ${f.mat} ${f.color}`:'(șters)',m}}
+function snapOf(r){const p=pm(r.prod),f=fm(r.fil),m={};(r.mats||[]).forEach(x=>{const t=mtm(x.mat);m[x.mat]={n:t?t.name:'(șters)',u:t?t.u:''}});const fl_={};rfl(r).forEach(x=>{fl_[x.fil]=fplain(x.fil)});return{fl:fl_,p:p?p.name:'(șters)',g:p?p.g:0,f:f?`${f.brand} ${f.mat} ${f.color}`:'(șters)',m}}
 function freezeMk(r){let ch=false;const i=S.mk.indexOf(r);
- if(r.fa===undefined){r.fa=sum(S.in.filter(x=>x.fil==r.fil&&x.d<=r.d),x=>x.g)-sum(S.mk.slice(0,i+1).filter(x=>x.fil==r.fil),x=>x.g);r.recon=1;ch=true}
+ const fa_=fil=>sum(S.in.filter(x=>x.fil==fil&&x.d<=r.d),x=>x.g)-sum(S.mk.slice(0,i+1),z=>sum(rfl(z).filter(y=>y.fil==fil),y=>y.g));
+ if(r.fa===undefined){r.fa=fa_(r.fil);r.recon=1;ch=true}
+ if(r.fl)r.fl.forEach(x=>{if(x.fa===undefined){x.fa=fa_(x.fil);r.recon=1;ch=true}});
  (r.mats||[]).forEach(m=>{if(m.after===undefined){m.after=sum(S.mi.filter(x=>x.mat==m.mat&&x.d<=r.d),x=>x.q)-sum(S.mk.slice(0,i+1),x=>sum((x.mats||[]).filter(y=>y.mat==m.mat),y=>y.q));r.recon=1;ch=true}});
  if(!r.sn){r.sn=snapOf(r);ch=true}return ch}
 async function pdfMk(id){USED={r:{},b:{}};const r=S.mk.find(x=>x.id==id);if(freezeMk(r))save();const sn=r.sn,fa=r.fa,old=!!r.recon,pages=[],G='0.06 0.62 0.54';let c='',y=0;const who=(r.ord||(r.byRole&&r.byRole!='admin'))?(r.by||''):'',co=company();
@@ -265,7 +269,7 @@ async function pdfMk(id){USED={r:{},b:{}};const r=S.mk.find(x=>x.id==id);if(free
  T(40,y,who?'Operator producție: '+who:'',10);y+=6;
  sec('1. Produs fabricat');tab([['Produs',40,'l'],['Cantitate (buc)',370,'r'],['Gramaj / buc',460,'r'],['Total filament',555,'r']],[[sn.p,r.q,sn.g+' g',n(r.g)+' g']]);
  if(r.qc){T(40,y-6,`Control calitate: ${r.qc.by} · ${r.qc.d} · conforme ${r.qc.ok} din ${r.qc.total} (rebuturi ${r.qc.total-r.qc.ok})${r.qc.note?' · '+r.qc.note:''}`.slice(0,120),9,0,'l','0.45 0.5 0.55');y+=12}
- sec('2. Filament consumat');tab([['Filament',40,'l'],['Consum',330,'r'],['Stoc înainte',440,'r'],['Stoc rămas',555,'r']],[[sn.f,n(r.g)+' g',n(fa+r.g)+' g',n(fa)+' g']]);
+ sec('2. Filament consumat');tab([['Filament',40,'l'],['Consum',330,'r'],['Stoc înainte',440,'r'],['Stoc rămas',555,'r']],rfl(r).map(x=>[(sn.fl&&sn.fl[x.fil])||sn.f,n(x.g)+' g',n(x.fa+x.g)+' g',n(x.fa)+' g']));
  if(old){T(40,y-6,'* Înregistrare veche: stocurile au fost reconstituite din istoricul înregistrărilor la prima descărcare și rămân neschimbate.',8,0,'l','0.45 0.5 0.55');y+=8}
  sec('3. Materiale și componente consumate');
  if((r.mats||[]).length)tab([['Material',40,'l'],['UM',270,'l'],['Consum',350,'r'],['Stoc înainte',450,'r'],['Stoc rămas',555,'r']],r.mats.map(m=>{const a=m.after,z=sn.m[m.mat]||{n:'(șters)',u:''};return[z.n,z.u,fq(m.q),fq(a+m.q),fq(a)]}));
@@ -276,20 +280,16 @@ async function pdfMk(id){USED={r:{},b:{}};const r=S.mk.find(x=>x.id==id);if(free
  try{const dl=null;if(dl){await dl.save({filename:fn,data:bytes});return}}catch(e){if(e&&e.code=='declined')return}
  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([bytes],{type:'application/pdf'}));a.download=fn;a.click()}
 function approveQc(id){const o=S.ord.find(x=>x.id==id),p=pm(o.prod),ok=Math.max(0,Math.min(o.q,Math.round(+document.getElementById('qa_'+id).value||0))),note=document.getElementById('qn_'+id).value.trim();
- if(!p||(!p.fil&&(!p.fils||!p.fils.length))){alert('Produsul nu are filament configurat. Cere administratorului să îl seteze în pagina Produse.');return}
+ if(!p||(!(o.fils&&o.fils.length)&&(!p.fil||!fm(p.fil)))){alert('Produsul nu are filament implicit. Cere administratorului să îl seteze în pagina Produse.');return}
  if(ok<1){alert('Nicio bucată conformă – folosește „Respinge".');return}
  if(ok<o.q&&!note){alert('Scrie la observații motivul rebuturilor.');return}
- const mats=(p.bom||[]).filter(b=>mtm(b.mat)).map(b=>({mat:b.mat,q:+(b.q*ok).toFixed(3),cu:mcpu(b.mat)}));
- const pfils=(p.fils&&p.fils.length)?p.fils.map(x=>({fil:x.fil,g:Math.round(ok*x.g*10)/10,cp:cpg(x.fil)})):[{fil:p.fil,g:Math.round(ok*(p.g||0)*10)/10,cp:cpg(p.fil)}];
- const g=sum(pfils,x=>x.g);
- const shortFils=pfils.filter(x=>stock(x.fil).s<x.g).map(x=>{const f=fm(x.fil);return f?`${f.brand} ${f.mat} ${f.color}`:'filament'});
- const shortMats=mats.filter(m=>m.q>mstk(m.mat)).map(m=>mtm(m.mat).name);
- const short=[...shortFils,...shortMats];
+ const mats=(p.bom||[]).filter(b=>mtm(b.mat)).map(b=>({mat:b.mat,q:+(b.q*o.q).toFixed(3),cu:mcpu(b.mat)})),fl=((o.fils&&o.fils.length)?o.fils:[{fil:p.fil,g:p.g}]).filter(x=>fm(x.fil)&&x.g>0).map(x=>({fil:x.fil,g:Math.round(o.q*x.g*10)/10,cp:cpg(x.fil)})),g=Math.round(sum(fl,x=>x.g)*10)/10;
+ if(!fl.length){alert('Comanda nu are niciun filament valid.');return}
+ const short=[...fl.filter(x=>stock(x.fil).s<x.g).map(x=>fplain(x.fil)),...mats.filter(m=>m.q>mstk(m.mat)).map(m=>mtm(m.mat).name)];
  if(short.length&&!confirm('Stoc insuficient la: '+short.join(', ')+'. Aprobi oricum?'))return;
- const nr='PR-'+String(Math.max(0,...S.mk.map(r=>+nrOf(r).slice(3)))+1).padStart(4,'0');
- const mainFil=pfils[0].fil;
- const r={id:uid(),nr,d:today(),prod:o.prod,q:ok,fil:mainFil,fils:pfils,g,cp:cpg(mainFil),by:o.startedBy||o.sentBy||'',byRole:'op',mats,ord:o.id,qc:{by:cur.name,d:today(),ok,total:o.q,note}};
- S.mk.push(r);r.fa=stock(mainFil).s;r.fils.forEach(x=>{x.fa=stock(x.fil).s});r.mats.forEach(m=>m.after=mstk(m.mat));r.sn=snapOf(r);
+ const nr='PR-'+String(Math.max(0,...S.mk.map(r=>+nrOf(r).slice(3)))+1).padStart(4,'0'),
+  r={id:uid(),nr,d:today(),prod:o.prod,q:ok,fil:fl[0].fil,g,cp:fl[0].cp,fl,by:o.startedBy||o.sentBy||'',byRole:'op',mats,ord:o.id,qc:{by:cur.name,d:today(),ok,total:o.q,note}};
+ S.mk.push(r);fl.forEach(x=>x.fa=stock(x.fil).s);r.fa=fl[0].fa;r.mats.forEach(m=>m.after=mstk(m.mat));r.sn=snapOf(r);
  o.st='done';o.doneAt=today();o.mk=r.id;o.qc={by:cur.name,d:today(),ok,note};save();saveOrd()}
 function rejectQc(id){const o=S.ord.find(x=>x.id==id),note=document.getElementById('qn_'+id).value.trim();
  if(!note){alert('Scrie motivul respingerii în Observații.');return}
@@ -298,11 +298,7 @@ const company=()=>(S.set[0]&&S.set[0].company)||'Atelier 3D';
 function saveCfg(e){const d=fd(e);S.set=[{id:'cfg',company:d.company.trim()||'Atelier 3D'}];cfgMsg='✓ Denumirea companiei a fost salvată.';save();setTimeout(()=>{cfgMsg='';if(tab=='usr')render()},2500)}
 function addFil(e){const d=fd(e);S.fil.push({id:uid(),brand:d.brand.trim(),mat:d.mat.trim(),color:d.color.trim(),hex:d.hex,pk:+d.pk,min:+d.min});save()}
 function addIn(e){const d=fd(e);S.in.push({id:uid(),d:d.d,fil:d.fil,q:+d.q,w:+d.w,g:d.q*d.w,p:+d.p,sup:d.sup});save()}
-function addProd(e){const d=fd(e),form=e.target;const nm=(d.name||'').trim(),mainFil=d.pfil||d.fil,mainG=+d.pg||+d.g;if(!nm||!mainFil||!(mainG>0)){alert('Completează denumirea, filamentul principal și gramajul.');return}
- const extraFils=[];const xFils=form.querySelectorAll('select[name=xfil]'),xGs=form.querySelectorAll('input[name=xfil_g]');
- xFils.forEach((sel,i)=>{const fId=sel.value,gVal=+(xGs[i]?xGs[i].value:0);if(fId&&gVal>0)extraFils.push({fil:fId,g:gVal})});
- const allFils=[{fil:mainFil,g:mainG},...extraFils],totalG=sum(allFils,x=>x.g);
- S.prod.push({id:uid(),name:nm,g:totalG,pr:+d.pr||0,fil:mainFil,fils:allFils});save()}
+function addProd(e){const d=fd(e);S.prod.push({id:uid(),name:d.name.trim(),g:+d.g,pr:+d.pr,fil:d.fil});save()}
 const MN=['Ianuarie','Februarie','Martie','Aprilie','Mai','Iunie','Iulie','August','Septembrie','Octombrie','Noiembrie','Decembrie'];
 function rptCard(){return`<div class="card"><h2>Raport lunar de vânzări <small>PDF pentru transmitere</small></h2><form onsubmit="event.preventDefault();pdfSales(this.m.value)"><label>Luna<input type="month" name="m" value="${today().slice(0,7)}" required></label><button class="btn">📄 Export PDF vânzări lunare</button></form></div>`}
 async function pdfSales(m){if(!/^\d{4}-\d{2}$/.test(m||'')){alert('Alege luna.');return}
@@ -339,11 +335,107 @@ function payCard(){const mo=today().slice(0,7),rows=['paynet','pos','cash',''].m
 function addSal(e){const d=fd(e),a=avail(d.prod);S.sal.push({id:uid(),d:d.d,prod:d.prod,q:+d.q,pr:+d.pr,cl:d.cl,pay:d.pay,liv:d.liv_on?Math.max(0,+d.liv||0):0});msg=d.q>a?`⚠ Ai vândut ${d.q} buc, dar în stoc erau doar ${a}. Înregistrează și producția.`:'';save()}
 function addExp(e){const d=fd(e);S.exp.push({id:uid(),d:d.d,cat:d.cat,desc:d.desc,a:+d.a});save()}
 function del(k,id){if(!confirm('Sigur ștergi înregistrarea?'))return;
-  if(k=='fil'&&(S.in.some(r=>r.fil==id)||S.mk.some(r=>r.fil==id))){alert('Filamentul are intrări/producții și nu poate fi șters.');return}
+  if(k=='fil'&&(S.in.some(r=>r.fil==id)||S.mk.some(r=>rfl(r).some(x=>x.fil==id))||S.ord.some(o=>(o.fils||[]).some(x=>x.fil==id)))){alert('Filamentul are intrări/producții și nu poate fi șters.');return}
   if(k=='prod'&&(S.mk.some(r=>r.prod==id)||S.sal.some(r=>r.prod==id))){alert('Produsul are producții/vânzări și nu poate fi șters.');return}
   if(k=='mat'&&(S.mi.some(r=>r.mat==id)||S.mk.some(r=>(r.mats||[]).some(x=>x.mat==id))||S.prod.some(p=>(p.bom||[]).some(b=>b.mat==id)))){alert('Materialul are intrări, consum sau rețetă și nu poate fi șters.');return}
   S[k]=S[k].filter(x=>x.id!=id);save()}
 function exp_(){const j=JSON.stringify(S,null,1),f='atelier3d-'+today()+'.json';
   (async()=>{try{const d=null;if(d){await d.save({filename:f,data:j});return}}catch(e){}
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([j],{type:'application/json'}));a.download=f;a.click()})()}
+/* ===== Configurator public: setări + comenzi online site ===== */
+TB.web='web_orders';TB.cfg='site_config';S.web=[];S.cfg=[];
+let webF='all',cfgLang='ro';
+const CURS=['MDL','RON','EUR'],LG=['ro','ru','en'],ZN=['MD','RO','EU','INT'],ZL={MD:'Moldova',RO:'România',EU:'UE',INT:'Alte țări'};
+const WST={new:['Nouă','#e8912c'],conf:['Confirmată','#2f6fed'],wip:['În lucru','#0f9d8a'],qc:['La control calitate','#8b5cf6'],done:['Finalizată','#14a06a'],canc:['Anulată','#e0525a']};
+const r2=v=>Math.round(v*100)/100;
+const L3=x=>({ro:'',ru:'',en:'',...(x&&typeof x=='object'?x:{ro:x||'',ru:x||'',en:x||''})});
+const M3=x=>({MDL:0,RON:0,EUR:0,...(x&&typeof x=='object'?x:{MDL:+x||0,RON:+x||0,EUR:+x||0})});
+const dfltCfg=()=>({id:'main',title:{ro:'Litere bubble 3D',ru:'Объёмные буквы 3D',en:'3D bubble letters'},sub:{ro:'Alege literele, mărimea și culorile – vezi prețul pe loc.',ru:'Выберите буквы, размер и цвета — цена сразу видна.',en:'Pick letters, size and colors — see the price instantly.'},
+ note:{ro:'Prețurile includ TVA.',ru:'Цены включают НДС.',en:'Prices include VAT.'},intro:{text:L3(''),images:[]},phone:'',email:'',max:20,min:M3(0),freeOver:M3(0),rates:{RON:3.9,EUR:19.5},fil:'',
+ sets:{lit:true,cyr:true,dig:true,sym:false},
+ sizes:[{id:'s1',label:'10 cm',h:10,price:{MDL:60,RON:15,EUR:3},g:25,on:true},{id:'s2',label:'15 cm',h:15,price:{MDL:100,RON:25,EUR:5},g:60,on:true},{id:'s3',label:'20 cm',h:20,price:{MDL:160,RON:40,EUR:8},g:110,on:true}],
+ colors:[['c1','Alb','Белый','White','#f5f5f5',0],['c2','Negru','Чёрный','Black','#222222',0],['c3','Roșu','Красный','Red','#e0434b',0],['c4','Albastru','Синий','Blue','#2f6fed',0],['c5','Roz','Розовый','Pink','#ff7eb6',0],['c6','Auriu','Золотой','Gold','#d4a64c',10]].map(([id,a,b,c,hex,e])=>({id,name:{ro:a,ru:b,en:c},hex,extra:{MDL:e,RON:r2(e/3.9),EUR:r2(e/19.5)},fil:'',on:true})),
+ deliv:[{id:'d1',label:{ro:'Ridicare personală',ru:'Самовывоз',en:'Pickup'},price:M3(0),addr:false,zones:['MD'],on:true},{id:'d2',label:{ro:'Curier – Moldova',ru:'Курьер — Молдова',en:'Courier – Moldova'},price:{MDL:50,RON:13,EUR:2.5},addr:true,zones:['MD'],on:true},{id:'d3',label:{ro:'Curier – România',ru:'Курьер — Румыния',en:'Courier – Romania'},price:{MDL:150,RON:38,EUR:7.5},addr:true,zones:['RO'],on:true},{id:'d4',label:{ro:'Curier – Uniunea Europeană',ru:'Курьер — Евросоюз',en:'Courier – European Union'},price:{MDL:300,RON:75,EUR:15},addr:true,zones:['EU'],on:true},{id:'d5',label:{ro:'Curier internațional',ru:'Международный курьер',en:'International courier'},price:{MDL:500,RON:125,EUR:25},addr:true,zones:['INT'],on:true}]});
+function cfgNorm(c){c.title=L3(c.title);c.sub=L3(c.sub);c.note=L3(c.note);c.intro=c.intro||{text:'',images:[]};c.intro.text=L3(c.intro.text);c.intro.images=(c.intro.images||[]).map(i=>({...i,cap:L3(i.cap)}));
+ c.min=M3(c.min);c.freeOver=M3(c.freeOver);c.rates={RON:3.9,EUR:19.5,...(c.rates||{})};c.sets={lit:true,cyr:false,dig:true,sym:false,...(c.sets||{})};
+ (c.sizes=c.sizes||[]).forEach(s=>s.price=M3(s.price));(c.colors=c.colors||[]).forEach(x=>{x.name=L3(x.name);x.extra=M3(x.extra);x.fil=x.fil||''});
+ (c.deliv=c.deliv||[]).forEach(d=>{d.label=L3(d.label);d.price=M3(d.price);d.zones=d.zones&&d.zones.length?d.zones:ZN.slice()});return c}
+const cfgW=()=>{if(!S.cfg.length)S.cfg=[dfltCfg()];return cfgNorm(S.cfg[0])},cfgR=()=>cfgNorm(JSON.parse(JSON.stringify(S.cfg[0]||dfltCfg())));
+const Lc=(v,cu)=>r2(v).toLocaleString('ro-RO',{minimumFractionDigits:2,maximumFractionDigits:2})+' '+(cu||'MDL');
+const sumCur=l=>CURS.map(cu=>[cu,sum(l.filter(w=>(w.cur||'MDL')==cu),w=>w.total||0)]).filter(x=>x[1]>0).map(([cu,v])=>Lc(v,cu)).join(' · ')||'0';
+const ctry=c=>{try{return new Intl.DisplayNames(['ro'],{type:'region'}).of(c)}catch(e){return c}};
+const wst=w=>{if(w.ord){const o=S.ord.find(x=>x.id==w.ord);if(o)return o.st=='done'?'done':o.st=='qc'?'qc':'wip'}return w.st||'new'};
+const ink=h=>{const n=parseInt(String(h).slice(1),16)||0;return ((n>>16&255)*299+(n>>8&255)*587+(n&255)*114)/1000>150?'#222':'#fff'};
+const siteUrl=()=>((location.origin&&location.origin!='null')?location.origin:'https://domeniul-tau.ro')+'/configurator';
+const lt=(l)=>l.ch==' '?'<span style="display:inline-block;width:10px"></span>':`<span style="display:inline-grid;place-items:center;min-width:26px;height:30px;padding:0 4px;border-radius:8px;font-weight:800;margin:2px;background:${esc(l.hex||'#ccc')};color:${ink(l.hex)};box-shadow:0 0 0 1px rgba(0,0,0,.12)" title="${esc(l.cn||'')}">${esc(l.ch)}</span>`;
+TABS.splice(Math.max(1,TABS.findIndex(t=>t[0]=='ord')+1),0,
+ ['web','Comenzi online','🌐','Comenzi online site','Comenzi plasate de clienți prin pagina publică'],
+ ['cfgsite','Setări configurator','⚙️','Setări configurator','Texte pe limbi, prețuri în 3 valute, culori, livrare și zone']);
+views.web=function(){const cn=k=>S.web.filter(w=>wst(w)==k).length,l=S.web.slice().sort((a,b)=>(b.ts||0)-(a.ts||0)).filter(w=>webF=='all'||wst(w)==webF);
+ const card=w=>{const st=wst(w),s=WST[st]||WST.new,cu=w.cur||'MDL',tk=w.ord?`<small style="color:var(--m)">Comandă internă legată în „Comenzi"</small>`:'';
+  const act=st=='new'?`<button class="btn" onclick="setWeb('${w.id}','conf')">✓ Confirmă</button><button class="btn ghost" onclick="setWeb('${w.id}','canc')">✗ Anulează</button>`
+   :st=='conf'?`<button class="btn" onclick="takeWeb('${w.id}')">▶ Preia în producție</button><button class="btn ghost" onclick="setWeb('${w.id}','canc')">✗</button>`
+   :st=='canc'?`<button class="btn ghost" onclick="setWeb('${w.id}','new')">↩ Redeschide</button>`:'';
+  return`<div class="fc"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><b>${esc(w.nr||'')}</b><span class="pill" style="background:${s[1]}22;color:${s[1]}">${s[0]}</span></div>
+  <small>${esc(w.d||'')} · ${w.n} litere · ${esc(w.size?w.size.label:'')} · ${cu}${w.lang?' · '+w.lang.toUpperCase():''}</small>
+  <div style="margin:8px 0">${(w.letters||[]).map(lt).join('')}</div>
+  <div class="om">👤 <b>${esc(w.name)}</b> · <a href="tel:${esc(w.phone)}">${esc(w.phone)}</a>${w.email?` · <a href="mailto:${esc(w.email)}">${esc(w.email)}</a>`:''}</div>
+  <div class="om">🚚 ${esc(w.deliv?w.deliv.label:'')} · ${esc(w.country?ctry(w.country):'')}${w.addr?' — '+esc([w.city,w.addr,w.zip].filter(Boolean).join(', ')):''}</div>
+  ${w.note?`<div class="on">${esc(w.note)}</div>`:''}
+  <div class="om">Produse ${Lc(w.sub,cu)} · livrare ${Lc(w.delivery,cu)} · <b>Total ${Lc(w.total,cu)}</b></div>${tk}
+  <div class="oa">${act}${(st=='canc'||st=='done')?`<button class="x" onclick="delWeb('${w.id}')">✕</button>`:''}</div></div>`};
+ return`<div class="kpi">${kpi('🆕',cn('new'),'Comenzi noi','pr')}${kpi('✅',cn('conf'),'Confirmate')}${kpi('🏭',cn('wip')+cn('qc'),'În lucru / calitate')}${kpi('💰',sumCur(S.web.filter(w=>wst(w)!='canc')),'Valoare comenzi (fără anulate)')}</div>
+ <div class="card"><h2>Pagina publică</h2><p style="margin:0">Linkul de dat clienților: <b><a href="${siteUrl()}" target="_blank" rel="noopener">${siteUrl()}</a></b></p></div>
+ <div class="card"><h2>Comenzi primite</h2><form onsubmit="return false"><label>Filtru<select onchange="webF=this.value;render()">${[['all','Toate'],...Object.entries(WST).map(([k,v])=>[k,v[0]])].map(([k,t])=>`<option value="${k}"${webF==k?' selected':''}>${t}</option>`).join('')}</select></label></form></div>
+ ${l.length?`<div class="fg" style="grid-template-columns:repeat(auto-fill,minmax(310px,1fr))">${l.map(card).join('')}</div>`:'<div class="card e">Nicio comandă online.</div>'}`};
+function setWeb(id,st){S.web.find(x=>x.id==id).st=st;save()}
+function delWeb(id){if(!confirm('Ștergi comanda online?'))return;S.web=S.web.filter(x=>x.id!=id);save()}
+function takeWeb(id){const w=S.web.find(x=>x.id==id),c=cfgR(),sc=c.sizes.find(s=>s.id==(w.size||{}).id),gl=(w.size&&w.size.g)||(sc&&sc.g)||0,g={},miss=[];
+ w.letters.forEach(l=>{if(l.ch==' ')return;const col=c.colors.find(x=>x.id==l.c),f=[l.fil,col&&col.fil,c.fil].find(x=>x&&fm(x));if(!f||!(gl>0)){miss.push(l.ch);return}g[f]=Math.round(((g[f]||0)+gl)*10)/10});
+ if(miss.length||!Object.keys(g).length){alert('Pentru a prelua comanda în producție, setează în „Setări configurator" gramele pe literă pentru mărimea aleasă și filamentul fiecărei culori (sau un filament implicit).');return}
+ const fils=Object.entries(g).map(([fil,gr])=>({fil,g:gr})),tot=Math.round(sum(fils,x=>x.g)*10)/10,pid=uid(),oid=uid(),cols={};
+ w.letters.forEach(l=>{if(l.ch!=' ')cols[l.cn]=(cols[l.cn]||[]).concat(l.ch)});
+ S.prod.push({id:pid,name:`Litere „${w.text}” ${w.size.label} (${w.nr})`,g:tot,pr:r2((w.sub||0)*(w.rate||1)),fil:fils[0].fil});
+ S.ord.push({id:oid,d:today(),client:w.name,prod:pid,q:1,due:'',pri:'n',fils,note:`Online ${w.nr} (${w.cur||'MDL'}): `+Object.entries(cols).map(([k,v])=>k+': '+v.join('')).join('; ')+(w.note?' | '+w.note:''),st:'new',web:w.id});
+ w.st='wip';w.ord=oid;save();saveOrd()}
+/* --- editare setări (cale de tip 'sizes.0.price.MDL') --- */
+function cfgSet(path,v){const c=cfgW(),a=path.split('.');let o=c;for(let i=0;i<a.length-1;i++)o=o[a[i]];o[a[a.length-1]]=v;save()}
+function setCfgL(l){cfgLang=l;render()}
+function cfgA(list){const c=cfgW(),d={sizes:{id:uid(),label:'Mărime nouă',h:10,price:M3(0),g:0,on:true},colors:{id:uid(),name:L3('Culoare nouă'),hex:'#888888',extra:M3(0),fil:'',on:true},deliv:{id:uid(),label:L3('Livrare nouă'),price:M3(0),addr:true,zones:['MD'],on:true}}[list];c[list].push(d);save()}
+function cfgD(list,i){if(!confirm('Ștergi acest rând?'))return;cfgW()[list].splice(i,1);save()}
+function cfgZone(i,z,on){const d=cfgW().deliv[i];d.zones=ZN.filter(x=>x==z?on:d.zones.includes(x));save()}
+function cfgFill(){const c=cfgW();if(!confirm('Completez prețurile în RON și EUR din cele în MDL, după cursurile setate? Valorile RON/EUR existente vor fi înlocuite.'))return;
+ const cv=v=>({RON:r2(v/(c.rates.RON||1)),EUR:r2(v/(c.rates.EUR||1))});
+ c.sizes.forEach(s=>Object.assign(s.price,cv(s.price.MDL)));c.colors.forEach(x=>Object.assign(x.extra,cv(x.extra.MDL)));c.deliv.forEach(d=>Object.assign(d.price,cv(d.price.MDL)));Object.assign(c.min,cv(c.min.MDL));Object.assign(c.freeOver,cv(c.freeOver.MDL));save()}
+function introW(){return cfgW().intro}
+function cfgID(i){introW().images.splice(i,1);save()}
+function cfgIU(){if(introW().images.length>=4){alert('Maximum 4 poze.');return}const v=(prompt('Adresa imaginii (https://… sau /img/poza.jpg):')||'').trim();if(!v)return;if(!/^(https?:\/\/|\/)\S+$/i.test(v)){alert('Adresă invalidă.');return}introW().images.push({url:v,cap:L3('')});save()}
+function cfgIF(inp){const f=inp.files[0];inp.value='';if(!f)return;if(introW().images.length>=4){alert('Maximum 4 poze.');return}
+ const rd=new FileReader();rd.onload=()=>{const im=new Image();im.onload=()=>{const k=Math.min(1,900/Math.max(im.width,im.height)),cv=document.createElement('canvas');cv.width=Math.round(im.width*k);cv.height=Math.round(im.height*k);const x=cv.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,cv.width,cv.height);x.drawImage(im,0,0,cv.width,cv.height);introW().images.push({url:cv.toDataURL('image/jpeg',0.8),cap:L3('')});save()};im.onerror=()=>alert('Fișier de imagine invalid.');im.src=rd.result};rd.readAsDataURL(f)}
+views.cfgsite=function(){const c=cfgR(),G=cfgLang,I=(v,p,t='text',x='')=>`<input type="${t}" value="${esc(v)}" ${x} onchange="cfgSet('${p}',${t=='number'?'+this.value||0':'this.value'})">`,
+ K=(on,p)=>`<input type="checkbox" ${on?'checked':''} onchange="cfgSet('${p}',this.checked)">`,N=(v,p)=>I(v,p,'number','min="0" step="0.01" style="min-width:80px"');
+ const cell3=(o,pre)=>CURS.map(cu=>N(o[cu],`${pre}.${cu}`));
+ const fo=v=>`<option value="">— nesetat —</option>`+S.fil.map(f=>`<option value="${f.id}"${v==f.id?' selected':''}>${esc(f.brand)} ${esc(f.mat)} ${esc(f.color)}</option>`).join('');
+ const tabs=`<div class="seg" style="display:flex;gap:6px;margin-bottom:12px">${LG.map(l=>`<button type="button" class="${l==G?'btn':'btn ghost'}" style="width:auto;height:38px" onclick="setCfgL('${l}')">${l.toUpperCase()}</button>`).join('')}</div>`;
+ return`<div class="card"><h2>Texte pe limbi <small>RO · RU · EN — editezi limba selectată</small></h2>${tabs}<form onsubmit="return false">
+ <label>Titlu pagină (${G.toUpperCase()})${I(c.title[G],'title.'+G)}</label><label>Subtitlu (${G.toUpperCase()})${I(c.sub[G],'sub.'+G)}</label>
+ <label class="full" style="grid-column:1/-1">Text sub preț — TVA, termen etc. (${G.toUpperCase()})${I(c.note[G],'note.'+G)}</label></form>
+ <label style="display:block;margin-top:14px;font-size:12px;font-weight:600;color:var(--m)">Text de prezentare sus (${G.toUpperCase()}) — rând gol = paragraf nou; rândurile care încep cu „- ” devin listă<textarea rows="6" style="width:100%;font:inherit;padding:10px 12px;border-radius:12px;border:1px solid var(--b);background:var(--in);color:var(--t);margin-top:6px" onchange="cfgSet('intro.text.${G}',this.value)">${esc(c.intro.text[G])}</textarea></label>
+ <div class="tw" style="margin-top:12px">${tbl(['Poză','Descriere ('+G.toUpperCase()+')',''],c.intro.images.map((im,i)=>[`<img src="${esc(im.url)}" alt="" style="width:80px;height:60px;object-fit:cover;border-radius:8px;display:block">`,I(im.cap[G],`intro.images.${i}.cap.${G}`,'text','maxlength="80"'),`<button class="x" onclick="cfgID(${i})">✕</button>`]))}</div>
+ <div class="row" style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px"><label class="btn ghost" style="display:inline-grid;place-items:center;cursor:pointer">+ Încarcă poză<input type="file" accept="image/*" hidden onchange="cfgIF(this)"></label><button class="btn ghost" onclick="cfgIU()">+ Poză din link</button></div>
+ <p class="hint" style="color:var(--m);font-size:12.5px">Maximum 4 poze (micșorate automat la 900 px). Lasă textul și pozele goale dacă nu vrei acest spațiu.</p></div>
+ <div class="card"><h2>General, limite și monede</h2><form onsubmit="return false">
+ <label>Număr maxim de litere${I(c.max,'max','number','min="1"')}</label><label>Filament implicit (producție)<select onchange="cfgSet('fil',this.value)">${fo(c.fil)}</select></label>
+ <label>Telefon afișat clienților${I(c.phone,'phone')}</label><label>Email afișat clienților${I(c.email,'email')}</label></form>
+ <div class="tw" style="margin-top:12px">${tbl(['','MDL (lei moldovenești)','RON (lei românești)','EUR (euro)'],[['Comandă minimă',...cell3(c.min,'min')],['Livrare gratuită de la (0 = niciodată)',...cell3(c.freeOver,'freeOver')],['Curs (MDL pentru 1 unitate)','<b>1</b>',N(c.rates.RON,'rates.RON'),N(c.rates.EUR,'rates.EUR')]])}</div>
+ <div class="row" style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px"><button class="btn ghost" onclick="cfgFill()">🔁 Completează RON și EUR din MDL (după curs)</button></div>
+ <p style="margin:14px 0 6px;font-weight:600">Caractere permise</p><div style="display:flex;gap:18px;flex-wrap:wrap">
+ <label class="chk">${K(c.sets.lit,'sets.lit')}Latină (A–Z, Ă Â Î Ș Ț)</label><label class="chk">${K(c.sets.cyr,'sets.cyr')}Chirilică (А–Я, Ё)</label><label class="chk">${K(c.sets.dig,'sets.dig')}Cifre 0–9</label><label class="chk">${K(c.sets.sym,'sets.sym')}Simboluri & ! ? . - +</label></div>
+ <p class="hint" style="color:var(--m);font-size:12.5px">O valută apare pe pagină doar dacă toate mărimile active au preț în acea valută.</p></div>
+ <div class="card"><h2>Mărimi și prețuri <small>preț pe literă</small></h2><div class="tw">${tbl(['Etichetă','Înălțime (cm)','MDL','RON','EUR','Grame / literă','Activ',''],c.sizes.map((s,i)=>[I(s.label,`sizes.${i}.label`),I(s.h,`sizes.${i}.h`,'number','min="1" step="0.5" style="min-width:70px"'),...cell3(s.price,`sizes.${i}.price`),I(s.g,`sizes.${i}.g`,'number','min="0" step="0.1" style="min-width:70px"'),K(s.on,`sizes.${i}.on`),`<button class="x" onclick="cfgD('sizes',${i})">✕</button>`]))}</div><button class="btn ghost" style="margin-top:12px" onclick="cfgA('sizes')">+ Mărime</button><p class="hint" style="color:var(--m);font-size:12.5px">„Grame / literă” nu este vizibil clienților; se folosește la preluarea comenzii în producție.</p></div>
+ <div class="card"><h2>Culori <small>supliment pe literă · filamentul folosit la producție</small></h2><div class="tw">${tbl(['Denumire ('+G.toUpperCase()+')','Culoare','Supl. MDL','Supl. RON','Supl. EUR','Filament','Activ',''],c.colors.map((x,i)=>[I(x.name[G],`colors.${i}.name.${G}`),`<input type="color" value="${esc(x.hex)}" onchange="cfgSet('colors.${i}.hex',this.value)" style="width:70px">`,...cell3(x.extra,`colors.${i}.extra`),`<select onchange="cfgSet('colors.${i}.fil',this.value)">${fo(x.fil)}</select>`,K(x.on,`colors.${i}.on`),`<button class="x" onclick="cfgD('colors',${i})">✕</button>`]))}</div><button class="btn ghost" style="margin-top:12px" onclick="cfgA('colors')">+ Culoare</button></div>
+ <div class="card"><h2>Livrare și zone <small>comenzi și în afara Moldovei</small></h2><div class="tw">${tbl(['Denumire ('+G.toUpperCase()+')','MDL','RON','EUR','Zone în care se aplică','Cere adresă','Activ',''],c.deliv.map((d,i)=>[I(d.label[G],`deliv.${i}.label.${G}`),...cell3(d.price,`deliv.${i}.price`),ZN.map(z=>`<label class="chk" style="margin:0 8px 0 0;display:inline-flex"><input type="checkbox" ${d.zones.includes(z)?'checked':''} onchange="cfgZone(${i},'${z}',this.checked)">${ZL[z]}</label>`).join(''),K(d.addr,`deliv.${i}.addr`),K(d.on,`deliv.${i}.on`),`<button class="x" onclick="cfgD('deliv',${i})">✕</button>`]))}</div><button class="btn ghost" style="margin-top:12px" onclick="cfgA('deliv')">+ Livrare</button>
+ <p class="hint" style="color:var(--m);font-size:12.5px">Zone: Moldova · România · UE (celelalte 25 de state) · Alte țări (UK, Ucraina, Elveția, SUA etc.). Dacă pentru o zonă nu există nicio livrare activă, clienții din acea țară nu pot comanda.</p></div>
+ <div class="card"><h2>Pagina publică</h2><p style="margin:0">Link: <b><a href="${siteUrl()}" target="_blank" rel="noopener">${siteUrl()}</a></b></p><p class="hint" style="color:var(--m);font-size:12.5px;margin:8px 0 0">Prețul final este recalculat pe server la plasarea comenzii, din aceste setări. Modificările se salvează automat.</p></div>`};
+
 render();boot();
